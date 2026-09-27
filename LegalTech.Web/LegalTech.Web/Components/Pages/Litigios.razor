@@ -1,0 +1,929 @@
+@page "/litigios"
+@rendermode InteractiveServer
+@using LegalTech.Web.Domain.Entities
+@using LegalTech.Web.Domain.Enums
+@using LegalTech.Web.Services
+@inject LitigioService LitigioService
+@inject ExpedienteService ExpedienteService
+@inject ClienteService ClienteService
+@inject PlazosService PlazosService
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Litigios y Controversias Marcarias - LegalTech Honduras</PageTitle>
+
+<div class="w-100 p-2 p-md-3">
+    <!-- 1. ENCABEZADO PRINCIPAL -->
+    <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <RadzenText TextStyle="TextStyle.H5" TagName="TagName.H1" Class="m-0 text-primary fw-bold">
+                    <RadzenIcon Icon="gavel" Class="me-1 text-danger" /> Litigios y Controversias Marcarias
+                </RadzenText>
+                <span class="badge bg-danger text-white px-2 py-1">DIGEPIH / IP</span>
+            </div>
+            <RadzenText TextStyle="TextStyle.Caption" Class="text-muted m-0">
+                Oposiciones (defensa y ataque), contestación de objeciones de fondo, cancelación por no uso (3 años), nulidades y recursos (LPA / LPI)
+            </RadzenText>
+        </div>
+        <div class="d-flex gap-2">
+            <RadzenButton Icon="add_circle" Text="Nuevo Litigio / Controversia" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Medium" 
+                          Click="@AbrirModalNuevo" Class="shadow-sm fw-bold" />
+            <RadzenButton Icon="dashboard" Text="Torre de Control" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Medium" 
+                          Click="@(() => NavigationManager.NavigateTo("/"))" Class="shadow-sm" />
+        </div>
+    </div>
+
+    <!-- 2. FRANJA EJECUTIVA DE INDICADORES Y FILTROS RÁPIDOS POR SEMÁFORO -->
+    <RadzenRow Gap="0.75rem" Class="mb-3">
+        <!-- 1. TOTAL LITIGIOS -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroRapido("todos"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("todos", "#0d6efd")">
+                <div>
+                    <span class="text-muted small d-block">📁 Todos</span>
+                    <strong class="fs-4 text-dark">@litigios.Count</strong>
+                </div>
+                <RadzenIcon Icon="balance" Class="text-primary fs-2" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <!-- 2. ROJO: CRÍTICOS (<= 5 DÍAS HÁBILES) -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroRapido("criticos"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("criticos", "var(--rz-danger, #dc3545)")">
+                <div>
+                    <span class="text-danger small d-block">🔴 Críticos (≤ 5 d)</span>
+                    <strong class="fs-4 text-danger">@totalCriticos</strong>
+                </div>
+                <RadzenIcon Icon="report_problem" Class="text-danger fs-2 animate-pulse" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <!-- 3. ÁMBAR: ALERTA (6 A 15 DÍAS HÁBILES) -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroRapido("alertas"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("alertas", "var(--rz-warning, #ffc107)")">
+                <div>
+                    <span class="text-warning small d-block">🟡 Alerta (6-15 d)</span>
+                    <strong class="fs-4 text-warning">@totalAlertas</strong>
+                </div>
+                <RadzenIcon Icon="schedule" Class="text-warning fs-2" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <!-- 4. VERDE: EN PLAZO (> 15 DÍAS HÁBILES) -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroRapido("enplazo"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("enplazo", "var(--rz-success, #198754)")">
+                <div>
+                    <span class="text-success small d-block">🟢 En Plazo (&gt; 15 d)</span>
+                    <strong class="fs-4 text-success">@totalEnPlazo</strong>
+                </div>
+                <RadzenIcon Icon="check_circle" Class="text-success fs-2" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <!-- 5. AZUL: PENDIENTE AUTORIZACIÓN CLIENTE -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroRapido("pendiente_autorizar"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("pendiente_autorizar", "#6f42c1")">
+                <div>
+                    <span class="small d-block" style="color: #6f42c1;">⚠️ Por Autorizar</span>
+                    <strong class="fs-4" style="color: #6f42c1;">@totalPendienteAutorizar</strong>
+                </div>
+                <RadzenIcon Icon="assignment_late" Class="fs-2" Style="color: #6f42c1;" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <!-- 6. RESUELTOS / FAVORABLES -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroRapido("resueltos"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("resueltos", "#17a2b8")">
+                <div>
+                    <span class="text-info small d-block">🏆 Resueltos</span>
+                    <strong class="fs-4 text-info">@totalResueltos</strong>
+                </div>
+                <RadzenIcon Icon="verified" Class="text-info fs-2" />
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <!-- 3. BARRA DE FILTROS AVANZADOS (TIPO LITIGIO, ESTADO Y BÚSQUEDA) -->
+    <RadzenCard Class="p-3 mb-3 bg-white shadow-sm border-0">
+        <RadzenRow Gap="1rem" AlignItems="AlignItems.Center">
+            <!-- Buscador Textual -->
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenFormField Text="Buscar por marca, partes o abogado" Class="w-100">
+                    <RadzenTextBox @bind-Value="textoBusqueda" @oninput="@((ChangeEventArgs e) => { textoBusqueda = e.Value?.ToString() ?? ""; FiltrarLitigios(); })" 
+                                   Placeholder="Ej: Café, Valle Tech, Oposición, Mendoza..." Class="w-100" />
+                </RadzenFormField>
+            </RadzenColumn>
+
+            <!-- Filtro Tipo de Litigio -->
+            <RadzenColumn Size="12" SizeSM="6" SizeMD="4">
+                <RadzenFormField Text="Tipo de Controversia / Acción" Class="w-100">
+                    <RadzenDropDown @bind-Value="filtroTipoLitigio" 
+                                    Data="@opcionesTipoLitigio" 
+                                    TextProperty="Nombre" 
+                                    ValueProperty="Valor" 
+                                    Change="@FiltrarLitigios" 
+                                    Class="w-100" />
+                </RadzenFormField>
+            </RadzenColumn>
+
+            <!-- Filtro Estado Procesal -->
+            <RadzenColumn Size="12" SizeSM="6" SizeMD="4">
+                <RadzenFormField Text="Estado Procesal del Litigio" Class="w-100">
+                    <RadzenDropDown @bind-Value="filtroEstadoLitigio" 
+                                    Data="@opcionesEstadoLitigio" 
+                                    TextProperty="Nombre" 
+                                    ValueProperty="Valor" 
+                                    Change="@FiltrarLitigios" 
+                                    Class="w-100" />
+                </RadzenFormField>
+            </RadzenColumn>
+        </RadzenRow>
+    </RadzenCard>
+
+    <!-- 4. MODAL / FORMULARIO DESPLEGABLE DE CREACIÓN / EDICIÓN -->
+    @if (mostrarFormulario)
+    {
+        <RadzenCard Class="p-3 mb-3 bg-white shadow-sm border-2 border-primary">
+            <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
+                <div class="d-flex align-items-center gap-2">
+                    <RadzenIcon Icon="gavel" Class="text-primary fs-4" />
+                    <strong class="fs-5 text-dark">@(litigioEdicion.Id == Guid.Empty ? "Nueva Controversia / Acción de Litigio" : "Editar Ficha de Litigio")</strong>
+                </div>
+                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => mostrarFormulario = false)" />
+            </div>
+
+            <RadzenTemplateForm TItem="Litigio" Data="@litigioEdicion" Submit="@GuardarLitigio">
+                <RadzenRow Gap="1rem">
+                    <!-- Expediente Vinculado -->
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Expediente Marcario Vinculado (Opcional)" Class="w-100">
+                            <RadzenDropDown @bind-Value="litigioEdicion.ExpedienteId" 
+                                            Data="@expedientes" 
+                                            TextProperty="DenominacionMarca" 
+                                            ValueProperty="Id" 
+                                            AllowClear="true" 
+                                            Placeholder="-- Acción Independiente o Seleccionar Expediente --" 
+                                            Change="@AlSeleccionarExpediente" 
+                                            Class="w-100">
+                                <Template Context="exp">
+                                    <div class="d-flex justify-content-between">
+                                        <strong>@exp.CodigoInterno - @exp.DenominacionMarca</strong>
+                                        <span class="text-muted small">Clase @exp.ClaseNiza</span>
+                                    </div>
+                                </Template>
+                            </RadzenDropDown>
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <!-- Tipo de Litigio -->
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Tipo de Litigio (Manual de Marcas)" Class="w-100">
+                            <RadzenDropDown @bind-Value="litigioEdicion.TipoLitigio" 
+                                            Data="@listaTiposLitigio" 
+                                            Change="@AlCambiarTipoLitigio" 
+                                            Class="w-100">
+                                <Template Context="tipo">
+                                    <span>@ObtenerNombreTipoLitigio(tipo)</span>
+                                </Template>
+                            </RadzenDropDown>
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <!-- Marca en Conflicto -->
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Signo Distintivo / Marca en Conflicto" Class="w-100">
+                            <RadzenTextBox @bind-Value="litigioEdicion.MarcaEnConflicto" Class="w-100" Placeholder="Denominación o signo disputado..." />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <!-- Abogado Litigante -->
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Abogado Litigante Asignado" Class="w-100">
+                            <RadzenTextBox @bind-Value="litigioEdicion.AbogadoLitigante" Class="w-100" Placeholder="Abogado responsable..." />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <!-- Partes Procesales -->
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Parte Demandante / Opositora" Class="w-100">
+                            <RadzenTextBox @bind-Value="litigioEdicion.ParteDemandante" Class="w-100" Placeholder="Nombre de la persona o empresa accionante..." />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Parte Demandada / Solicitante" Class="w-100">
+                            <RadzenTextBox @bind-Value="litigioEdicion.ParteDemandada" Class="w-100" Placeholder="Nombre de la parte contra la que se acciona..." />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <!-- Fechas y Plazos Perentorios -->
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Fecha Notificación DIGEPIH" Class="w-100">
+                            <RadzenDatePicker @bind-Value="litigioEdicion.FechaNotificacion" DateFormat="dd/MM/yyyy" 
+                                              Change="@(async (DateTime? args) => await RecomputarFechaFatal())" Class="w-100" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Días Hábiles del Término Legal" Class="w-100">
+                            <RadzenNumeric @bind-Value="diasHabilesCalculo" Min="1" Max="90" 
+                                           Change="@(async (int args) => await RecomputarFechaFatal())" Class="w-100" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Fecha Vencimiento Fatal (Art. 42 LPA)" Class="w-100">
+                            <RadzenDatePicker @bind-Value="litigioEdicion.FechaVencimientoFatal" DateFormat="dd/MM/yyyy" Class="w-100" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <!-- Estado Procesal y Autorización del Cliente -->
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Estado Procesal Actual" Class="w-100">
+                            <RadzenDropDown @bind-Value="litigioEdicion.Estado" 
+                                            Data="@listaEstadosLitigio" 
+                                            Class="w-100">
+                                <Template Context="est">
+                                    <span>@ObtenerNombreEstadoLitigio(est)</span>
+                                </Template>
+                            </RadzenDropDown>
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <div class="p-3 border rounded bg-light d-flex align-items-center gap-2 h-100">
+                            <RadzenCheckBox @bind-Value="litigioEdicion.AutorizadoPorCliente" Name="chkAut" />
+                            <RadzenLabel Text="Autorización expresa del cliente obtenida (asume costos y honorarios de defensa)" Component="chkAut" 
+                                         Class="@(litigioEdicion.AutorizadoPorCliente ? "fw-bold text-success" : "fw-bold text-danger")" />
+                        </div>
+                    </RadzenColumn>
+
+                    <!-- PANEL ESPECIAL PARA CANCELACIÓN POR NO USO (3 AÑOS) -->
+                    @if (litigioEdicion.TipoLitigio == TipoLitigio.AccionCancelacionPorNoUso)
+                    {
+                        <RadzenColumn Size="12">
+                            <div class="p-3 border rounded bg-light border-start border-4 border-warning">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <RadzenIcon Icon="verified_user" Class="text-warning fs-5" />
+                                    <strong class="text-dark">Auditoría Previa Obligatoria de Cancelación por No Uso (Manual Párrs. 420-425)</strong>
+                                </div>
+                                <p class="text-muted small mb-2">
+                                    Para promover la acción ante la DIGEPIH se requiere acreditar que la marca no ha sido utilizada por 3 años consecutivos ni ha pagado tasas de rehabilitación.
+                                </p>
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <div class="p-2 border rounded bg-white">
+                                            <RadzenCheckBox @bind-Value="litigioEdicion.ConstanciaRehabilitacionObtenida" Name="chkRehab" />
+                                            <RadzenLabel Text="Constancia de no rehabilitación obtenida de DIGEPIH (Cero pagos en 3 años)" Component="chkRehab" Class="ms-2 small fw-semibold" />
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="p-2 border rounded bg-white">
+                                            <RadzenCheckBox @bind-Value="litigioEdicion.AuditoriaRedesSocialesRealizada" Name="chkRedes" />
+                                            <RadzenLabel Text="Auditoría digital negativa en redes sociales y buscadores (Instagram, TikTok, Facebook, Google)" Component="chkRedes" Class="ms-2 small fw-semibold" />
+                                        </div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <RadzenFormField Text="Ruta o URI del Reporte de Evidencia de No Uso" Class="w-100">
+                                            <RadzenTextBox @bind-Value="litigioEdicion.ReporteEvidenciaUsoUri" Placeholder="Ej: docs/auditoria_redes_marcas.pdf" Class="w-100" />
+                                        </RadzenFormField>
+                                    </div>
+                                </div>
+                            </div>
+                        </RadzenColumn>
+                    }
+
+                    <!-- Estrategia Jurídica y Observaciones -->
+                    <RadzenColumn Size="12">
+                        <RadzenFormField Text="Estrategia Jurídica, Fundamentos y Bitácora Procesal" Class="w-100">
+                            <RadzenTextArea @bind-Value="litigioEdicion.ObservacionesEstrategia" Rows="3" Class="w-100" 
+                                            Placeholder="Detalle de agravios, argumentos de distintividad, pruebas aportadas o resoluciones emitidas..." />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <!-- Botones de Guardar / Cancelar -->
+                    <RadzenColumn Size="12" Class="text-end mt-2">
+                        <RadzenButton ButtonType="ButtonType.Submit" Icon="save" Text="Guardar Controversia" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Medium" Class="me-2" />
+                        <RadzenButton ButtonType="ButtonType.Button" Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Medium" 
+                                      Click="@(() => mostrarFormulario = false)" />
+                    </RadzenColumn>
+                </RadzenRow>
+            </RadzenTemplateForm>
+        </RadzenCard>
+    }
+
+    <!-- 5. TABLA MAESTRA DE CONTROVERSIAS Y LITIGIOS (RadzenDataGrid) -->
+    <RadzenCard Class="p-2 p-md-3 shadow-sm border-0">
+        @if (cargando)
+        {
+            <div class="p-4 text-center">
+                <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" Class="mb-2" />
+                <span class="text-muted small">Cargando controversias y evaluando cómputos de plazos fatales...</span>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive w-100" style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+                <RadzenDataGrid Data="@litigiosFiltrados" TItem="Litigio" AllowPaging="true" PageSize="10" 
+                                AllowSorting="true" EmptyText="No se encontraron controversias o litigios con los filtros seleccionados." 
+                                Class="w-100 table-sm" Style="min-width: 1050px;">
+                    <Columns>
+                        <!-- 1. SEMÁFORO Y PLAZO FATAL -->
+                        <RadzenDataGridColumn TItem="Litigio" Title="Semáforo / Término Fatal" Width="170px">
+                            <Template Context="l">
+                                @if (semaforosLitigios.TryGetValue(l.Id, out var sem))
+                                {
+                                    <div class="d-flex flex-column gap-1">
+                                        @if (sem.NivelRiesgo == "Vencido")
+                                        {
+                                            <span class="badge bg-dark text-white px-2 py-1">
+                                                <RadzenIcon Icon="error" Class="me-1" Style="font-size: 0.8rem;" /> Vencido (@Math.Abs(sem.DiasHabilesRestantes) d.h.)
+                                            </span>
+                                        }
+                                        else if (sem.NivelRiesgo == "Critico")
+                                        {
+                                            <span class="badge bg-danger text-white px-2 py-1 animate-pulse">
+                                                <RadzenIcon Icon="report_problem" Class="me-1" Style="font-size: 0.8rem;" /> @sem.DiasHabilesRestantes d.h. restantes
+                                            </span>
+                                        }
+                                        else if (sem.NivelRiesgo == "Alerta")
+                                        {
+                                            <span class="badge bg-warning text-dark px-2 py-1">
+                                                <RadzenIcon Icon="schedule" Class="me-1" Style="font-size: 0.8rem;" /> @sem.DiasHabilesRestantes d.h. restantes
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success text-white px-2 py-1">
+                                                <RadzenIcon Icon="check_circle" Class="me-1" Style="font-size: 0.8rem;" /> @sem.DiasHabilesRestantes d.h.
+                                            </span>
+                                        }
+                                        <span class="text-muted small">Fatal: <strong class="text-danger">@l.FechaVencimientoFatal.ToString("dd/MM/yyyy")</strong></span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">@l.FechaVencimientoFatal.ToString("dd/MM/yyyy")</span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 2. MARCA EN CONFLICTO Y EXPEDIENTE -->
+                        <RadzenDataGridColumn TItem="Litigio" Title="Signo / Expediente" Width="220px">
+                            <Template Context="l">
+                                <div>
+                                    <strong class="text-dark d-block">@l.MarcaEnConflicto</strong>
+                                    @if (l.Expediente != null)
+                                    {
+                                        <div class="d-flex align-items-center gap-1 mt-1">
+                                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary font-monospace" style="font-size: 0.75rem;">
+                                                @l.Expediente.CodigoInterno
+                                            </span>
+                                            <a href="/expedientes/@l.ExpedienteId" class="text-decoration-none small text-muted hover-underline" title="Ver ficha de expediente">
+                                                Clase @l.Expediente.ClaseNiza <RadzenIcon Icon="open_in_new" Style="font-size: 0.75rem;" />
+                                            </a>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-muted border" style="font-size: 0.7rem;">Acción Independiente</span>
+                                    }
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 3. TIPO DE LITIGIO -->
+                        <RadzenDataGridColumn TItem="Litigio" Title="Tipo de Acción" Width="180px">
+                            <Template Context="l">
+                                <span class="badge @ObtenerBadgeClaseTipoLitigio(l.TipoLitigio) text-wrap text-start" style="font-size: 0.75rem;">
+                                    @ObtenerNombreTipoLitigio(l.TipoLitigio)
+                                </span>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 4. PARTES PROCESALES -->
+                        <RadzenDataGridColumn TItem="Litigio" Title="Partes Procesales" Width="220px">
+                            <Template Context="l">
+                                <div class="small">
+                                    <div><strong class="text-muted">Dem:</strong> <span class="text-dark">@l.ParteDemandante</span></div>
+                                    <div><strong class="text-muted">Dda:</strong> <span class="text-dark">@l.ParteDemandada</span></div>
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 5. AUTORIZACIÓN CLIENTE -->
+                        <RadzenDataGridColumn TItem="Litigio" Title="Autorización Cliente" Width="130px" TextAlign="TextAlign.Center">
+                            <Template Context="l">
+                                @if (l.AutorizadoPorCliente)
+                                {
+                                    <span class="badge bg-success" title="Cliente autorizó formalmente asumir costos de defensa">
+                                        <RadzenIcon Icon="verified" Style="font-size: 0.8rem;" /> Autorizado
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger animate-pulse" title="¡ALERTA! Requiere confirmación del cliente antes de radicar escrito">
+                                        <RadzenIcon Icon="warning" Style="font-size: 0.8rem;" /> Sin Autorizar
+                                    </span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 6. ESTADO PROCESAL -->
+                        <RadzenDataGridColumn TItem="Litigio" Title="Estado Procesal" Width="170px">
+                            <Template Context="l">
+                                <span class="badge @ObtenerBadgeClaseEstadoLitigio(l.Estado)" style="font-size: 0.75rem;">
+                                    @ObtenerNombreEstadoLitigio(l.Estado)
+                                </span>
+                                @if (!string.IsNullOrEmpty(l.AbogadoLitigante))
+                                {
+                                    <span class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                                        <RadzenIcon Icon="person" Style="font-size: 0.7rem;" /> @l.AbogadoLitigante
+                                    </span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 7. ACCIONES -->
+                        <RadzenDataGridColumn TItem="Litigio" Title="Acciones" Width="140px" TextAlign="TextAlign.Center">
+                            <Template Context="l">
+                                <div class="d-flex justify-content-center gap-1">
+                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
+                                                  Click="@(() => AbrirModalEditar(l))" title="Editar / Ver Detalle" />
+                                    <RadzenButton Icon="campaign" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
+                                                  Click="@(() => AbrirModalRecurso(l))" title="Interponer Recurso (10 d / 3 d / 30 d)" />
+                                    <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.ExtraSmall" 
+                                                  Click="@(() => ConfirmarEliminar(l))" title="Eliminar" />
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </div>
+        }
+    </RadzenCard>
+</div>
+
+<!-- MODAL PARA INTERPOSICIÓN DE RECURSOS PROCESALES (10d, 3d, 30d) -->
+@if (mostrarModalRecurso && litigioRecurso != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header bg-warning bg-opacity-25 border-bottom">
+                    <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2">
+                        <RadzenIcon Icon="campaign" Class="text-warning" /> Interponer Recurso Procesal (LPA / LPI)
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="@(() => mostrarModalRecurso = false)"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <div class="mb-3">
+                        <strong class="d-block text-dark">Marca en Controversia:</strong>
+                        <span class="text-primary font-monospace">@litigioRecurso.MarcaEnConflicto</span>
+                    </div>
+
+                    <RadzenFormField Text="Tipo de Recurso a Interponer" Class="w-100 mb-3">
+                        <RadzenDropDown @bind-Value="tipoRecursoSeleccionado" 
+                                        Data="@opcionesRecursos" 
+                                        TextProperty="Nombre" 
+                                        ValueProperty="Estado" 
+                                        Class="w-100" />
+                    </RadzenFormField>
+
+                    <RadzenFormField Text="Fecha Notificación de la Resolución Impugnada" Class="w-100 mb-3">
+                        <RadzenDatePicker @bind-Value="fechaNotificacionRecurso" DateFormat="dd/MM/yyyy" Class="w-100" />
+                    </RadzenFormField>
+
+                    <div class="p-2 rounded bg-light border-start border-3 border-danger mb-3">
+                        <strong class="small d-block text-danger">Plazos Fatales en Días Hábiles (Art. 42 LPA):</strong>
+                        <ul class="mb-0 small text-muted ps-3">
+                            <li><b>Reposición:</b> 10 días hábiles ante DIGEPIH.</li>
+                            <li><b>Apelación:</b> 3 días hábiles ante Superintendencia de Recursos del IP.</li>
+                            <li><b>Contencioso-Administrativo:</b> 30 días hábiles ante Juzgados de Letras.</li>
+                        </ul>
+                    </div>
+
+                    <RadzenFormField Text="Abogado Litigante Responsable" Class="w-100">
+                        <RadzenTextBox @bind-Value="usuarioRecurso" Class="w-100" />
+                    </RadzenFormField>
+                </div>
+                <div class="modal-footer bg-light">
+                    <RadzenButton Text="Interponer y Computar Plazo" Icon="send" ButtonStyle="ButtonStyle.Warning" 
+                                  Click="@EjecutarInterposicionRecurso" Class="fw-bold" />
+                    <RadzenButton Text="Cancelar" ButtonStyle="ButtonStyle.Light" Click="@(() => mostrarModalRecurso = false)" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .animate-pulse {
+        animation: pulse-danger 2s infinite ease-in-out;
+    }
+    @@keyframes pulse-danger {
+        0% { opacity: 1; }
+        50% { opacity: 0.6; }
+        100% { opacity: 1; }
+    }
+    .hover-underline:hover {
+        text-decoration: underline !important;
+    }
+</style>
+
+@code {
+    private bool cargando = true;
+    private bool mostrarFormulario = false;
+    private bool mostrarModalRecurso = false;
+
+    private List<Litigio> litigios = new();
+    private List<Litigio> litigiosFiltrados = new();
+    private List<Expediente> expedientes = new();
+    private Litigio litigioEdicion = new();
+    private Litigio? litigioRecurso = null;
+
+    private Dictionary<Guid, SemaforoPlazo> semaforosLitigios = new();
+
+    private string filtroRapido = "todos"; // "todos", "criticos", "alertas", "enplazo", "pendiente_autorizar", "resueltos"
+    private string textoBusqueda = "";
+    private int filtroTipoLitigio = 0; // 0 = todos
+    private int filtroEstadoLitigio = 0; // 0 = todos
+
+    private int totalCriticos = 0;
+    private int totalAlertas = 0;
+    private int totalEnPlazo = 0;
+    private int totalPendienteAutorizar = 0;
+    private int totalResueltos = 0;
+
+    private int diasHabilesCalculo = 10;
+
+    private readonly TipoLitigio[] listaTiposLitigio = Enum.GetValues<TipoLitigio>();
+    private readonly EstadoLitigio[] listaEstadosLitigio = Enum.GetValues<EstadoLitigio>();
+
+    // Estado del modal de recursos
+    private EstadoLitigio tipoRecursoSeleccionado = EstadoLitigio.RecurridoReposicion;
+    private DateTime fechaNotificacionRecurso = DateTime.Today;
+    private string usuarioRecurso = "Abg. Carlos Mendoza (Litigios)";
+
+    private record OpcionDropdown(int Valor, string Nombre);
+    private record OpcionRecurso(EstadoLitigio Estado, string Nombre);
+
+    private List<OpcionDropdown> opcionesTipoLitigio = new()
+    {
+        new(0, "Todos los Tipos de Controversia"),
+        new((int)TipoLitigio.ContestacionObjecionFondo, "Contestación Objeción de Fondo (60 d)"),
+        new((int)TipoLitigio.OposicionDefensa, "Oposición en Defensa (10 d)"),
+        new((int)TipoLitigio.OposicionAtaque, "Oposición en Ataque (30 d post-aviso)"),
+        new((int)TipoLitigio.AccionCancelacionPorNoUso, "Cancelación por No Uso (3 años)"),
+        new((int)TipoLitigio.AccionNulidad, "Acción de Nulidad de Registro")
+    };
+
+    private List<OpcionDropdown> opcionesEstadoLitigio = new()
+    {
+        new(0, "Todos los Estados Procesales"),
+        new((int)EstadoLitigio.BorradorEstrategia, "Borrador de Estrategia"),
+        new((int)EstadoLitigio.PendienteAutorizacionCliente, "Pendiente Autorización del Cliente"),
+        new((int)EstadoLitigio.PresentadoAnteDIGEPIH, "Presentado ante DIGEPIH"),
+        new((int)EstadoLitigio.PeriodoProbatorio, "Período Probatorio"),
+        new((int)EstadoLitigio.AlegatosFinales, "Alegatos Finales"),
+        new((int)EstadoLitigio.RecurridoReposicion, "Recurrido en Reposición (10 d)"),
+        new((int)EstadoLitigio.RecurridoApelacion, "Recurrido en Apelación (3 d)"),
+        new((int)EstadoLitigio.EnContenciosoAdministrativo, "En Contencioso-Administrativo (30 d)"),
+        new((int)EstadoLitigio.ResueltoFavorable, "Resuelto Favorable"),
+        new((int)EstadoLitigio.ResueltoDesfavorable, "Resuelto Desfavorable")
+    };
+
+    private List<OpcionRecurso> opcionesRecursos = new()
+    {
+        new(EstadoLitigio.RecurridoReposicion, "Recurso de Reposición (10 días hábiles ante DIGEPIH)"),
+        new(EstadoLitigio.RecurridoApelacion, "Recurso de Apelación (3 días hábiles ante Superintendencia)"),
+        new(EstadoLitigio.EnContenciosoAdministrativo, "Demanda Contencioso-Administrativa (30 días hábiles ante Juzgado)")
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        cargando = true;
+        expedientes = await ExpedienteService.GetExpedientesAsync();
+        litigios = await LitigioService.GetLitigiosAsync();
+
+        semaforosLitigios.Clear();
+        totalCriticos = 0;
+        totalAlertas = 0;
+        totalEnPlazo = 0;
+        totalPendienteAutorizar = 0;
+        totalResueltos = 0;
+
+        foreach (var l in litigios)
+        {
+            int diasRestantes = await PlazosService.CalcularDiasHabilesRestantesAsync(l.FechaVencimientoFatal);
+            bool esCumplido = l.Estado == EstadoLitigio.ResueltoFavorable || l.Estado == EstadoLitigio.ResueltoDesfavorable;
+            var sem = PlazosService.EvaluarSemaforo(diasRestantes, esCumplido);
+            semaforosLitigios[l.Id] = sem;
+
+            if (esCumplido)
+            {
+                totalResueltos++;
+            }
+            else
+            {
+                if (sem.NivelRiesgo == "Critico" || sem.NivelRiesgo == "Vencido")
+                    totalCriticos++;
+                else if (sem.NivelRiesgo == "Alerta")
+                    totalAlertas++;
+                else if (sem.NivelRiesgo == "Normal")
+                    totalEnPlazo++;
+
+                if (!l.AutorizadoPorCliente)
+                    totalPendienteAutorizar++;
+            }
+        }
+
+        FiltrarLitigios();
+        cargando = false;
+    }
+
+    private void SeleccionarFiltroRapido(string filtro)
+    {
+        filtroRapido = filtroRapido == filtro && filtro != "todos" ? "todos" : filtro;
+        FiltrarLitigios();
+    }
+
+    private void FiltrarLitigios()
+    {
+        var query = litigios.AsEnumerable();
+
+        // 1. Filtro Rápido (Semáforo / Estado)
+        if (filtroRapido == "criticos")
+        {
+            query = query.Where(l => semaforosLitigios.TryGetValue(l.Id, out var s) && (s.NivelRiesgo == "Critico" || s.NivelRiesgo == "Vencido") && l.Estado != EstadoLitigio.ResueltoFavorable && l.Estado != EstadoLitigio.ResueltoDesfavorable);
+        }
+        else if (filtroRapido == "alertas")
+        {
+            query = query.Where(l => semaforosLitigios.TryGetValue(l.Id, out var s) && s.NivelRiesgo == "Alerta" && l.Estado != EstadoLitigio.ResueltoFavorable && l.Estado != EstadoLitigio.ResueltoDesfavorable);
+        }
+        else if (filtroRapido == "enplazo")
+        {
+            query = query.Where(l => semaforosLitigios.TryGetValue(l.Id, out var s) && s.NivelRiesgo == "Normal" && l.Estado != EstadoLitigio.ResueltoFavorable && l.Estado != EstadoLitigio.ResueltoDesfavorable);
+        }
+        else if (filtroRapido == "pendiente_autorizar")
+        {
+            query = query.Where(l => !l.AutorizadoPorCliente && l.Estado != EstadoLitigio.ResueltoFavorable && l.Estado != EstadoLitigio.ResueltoDesfavorable);
+        }
+        else if (filtroRapido == "resueltos")
+        {
+            query = query.Where(l => l.Estado == EstadoLitigio.ResueltoFavorable || l.Estado == EstadoLitigio.ResueltoDesfavorable);
+        }
+
+        // 2. Filtro por Tipo de Litigio
+        if (filtroTipoLitigio > 0)
+        {
+            query = query.Where(l => (int)l.TipoLitigio == filtroTipoLitigio);
+        }
+
+        // 3. Filtro por Estado
+        if (filtroEstadoLitigio > 0)
+        {
+            query = query.Where(l => (int)l.Estado == filtroEstadoLitigio);
+        }
+
+        // 4. Búsqueda textual
+        if (!string.IsNullOrWhiteSpace(textoBusqueda))
+        {
+            string t = textoBusqueda.Trim().ToLowerInvariant();
+            query = query.Where(l =>
+                l.MarcaEnConflicto.ToLowerInvariant().Contains(t) ||
+                l.ParteDemandante.ToLowerInvariant().Contains(t) ||
+                l.ParteDemandada.ToLowerInvariant().Contains(t) ||
+                (l.AbogadoLitigante != null && l.AbogadoLitigante.ToLowerInvariant().Contains(t)) ||
+                (l.Expediente != null && l.Expediente.CodigoInterno.ToLowerInvariant().Contains(t))
+            );
+        }
+
+        litigiosFiltrados = query.ToList();
+    }
+
+    private string ObtenerEstiloCard(string filtro, string accentColor)
+    {
+        bool esActivo = filtroRapido == filtro;
+        if (esActivo)
+        {
+            return $"cursor: pointer; transition: all 0.2s ease-in-out; border: 2.5px solid {accentColor} !important; box-shadow: 0 4px 14px rgba(0,0,0,0.16) !important; transform: translateY(-2px); border-radius: 8px;";
+        }
+        return "cursor: pointer; transition: all 0.2s ease-in-out; border: 2.5px solid transparent !important; border-radius: 8px;";
+    }
+
+    private async Task AbrirModalNuevo()
+    {
+        litigioEdicion = new Litigio
+        {
+            Id = Guid.Empty,
+            TipoLitigio = TipoLitigio.OposicionDefensa,
+            FechaNotificacion = DateTime.Today,
+            FechaVencimientoFatal = DateTime.Today.AddDays(14),
+            AutorizadoPorCliente = false,
+            AbogadoLitigante = "Abg. Carlos Mendoza (Litigios)",
+            Estado = EstadoLitigio.BorradorEstrategia,
+            CreadoEn = DateTime.UtcNow
+        };
+        diasHabilesCalculo = 10;
+        await RecomputarFechaFatal();
+        mostrarFormulario = true;
+    }
+
+    private void AbrirModalEditar(Litigio l)
+    {
+        litigioEdicion = new Litigio
+        {
+            Id = l.Id,
+            ExpedienteId = l.ExpedienteId,
+            TipoLitigio = l.TipoLitigio,
+            ParteDemandante = l.ParteDemandante,
+            ParteDemandada = l.ParteDemandada,
+            MarcaEnConflicto = l.MarcaEnConflicto,
+            FechaNotificacion = l.FechaNotificacion,
+            FechaVencimientoFatal = l.FechaVencimientoFatal,
+            AutorizadoPorCliente = l.AutorizadoPorCliente,
+            AbogadoLitigante = l.AbogadoLitigante,
+            Estado = l.Estado,
+            ObservacionesEstrategia = l.ObservacionesEstrategia,
+            ResultadoFinal = l.ResultadoFinal,
+            ConstanciaRehabilitacionObtenida = l.ConstanciaRehabilitacionObtenida,
+            AuditoriaRedesSocialesRealizada = l.AuditoriaRedesSocialesRealizada,
+            ReporteEvidenciaUsoUri = l.ReporteEvidenciaUsoUri,
+            CreadoEn = l.CreadoEn
+        };
+        diasHabilesCalculo = Math.Max(1, (int)(l.FechaVencimientoFatal - l.FechaNotificacion).TotalDays);
+        mostrarFormulario = true;
+    }
+
+    private void AlSeleccionarExpediente(object value)
+    {
+        if (litigioEdicion.ExpedienteId.HasValue)
+        {
+            var exp = expedientes.FirstOrDefault(e => e.Id == litigioEdicion.ExpedienteId.Value);
+            if (exp != null)
+            {
+                if (string.IsNullOrWhiteSpace(litigioEdicion.MarcaEnConflicto))
+                    litigioEdicion.MarcaEnConflicto = exp.DenominacionMarca;
+
+                if (litigioEdicion.TipoLitigio == TipoLitigio.OposicionDefensa || litigioEdicion.TipoLitigio == TipoLitigio.ContestacionObjecionFondo)
+                {
+                    litigioEdicion.ParteDemandada = exp.Cliente?.NombreRazonSocial ?? "";
+                }
+                else if (litigioEdicion.TipoLitigio == TipoLitigio.OposicionAtaque || litigioEdicion.TipoLitigio == TipoLitigio.AccionCancelacionPorNoUso || litigioEdicion.TipoLitigio == TipoLitigio.AccionNulidad)
+                {
+                    litigioEdicion.ParteDemandante = exp.Cliente?.NombreRazonSocial ?? "";
+                }
+            }
+        }
+    }
+
+    private async Task AlCambiarTipoLitigio()
+    {
+        diasHabilesCalculo = litigioEdicion.TipoLitigio switch
+        {
+            TipoLitigio.ContestacionObjecionFondo => 60,
+            TipoLitigio.OposicionDefensa => 10,
+            TipoLitigio.OposicionAtaque => 30,
+            TipoLitigio.AccionCancelacionPorNoUso => 20,
+            TipoLitigio.AccionNulidad => 30,
+            _ => 15
+        };
+        await RecomputarFechaFatal();
+    }
+
+    private async Task RecomputarFechaFatal()
+    {
+        litigioEdicion.FechaVencimientoFatal = await PlazosService.CalcularVencimientoFatalAsync(litigioEdicion.FechaNotificacion, diasHabilesCalculo);
+        StateHasChanged();
+    }
+
+    private async Task GuardarLitigio()
+    {
+        if (string.IsNullOrWhiteSpace(litigioEdicion.MarcaEnConflicto))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Atención", "Debe indicar la marca o signo en conflicto.");
+            return;
+        }
+
+        await LitigioService.GuardarLitigioAsync(litigioEdicion);
+        NotificationService.Notify(NotificationSeverity.Success, "Éxito", "Controversia guardada satisfactoriamente.");
+        mostrarFormulario = false;
+        await CargarDatos();
+    }
+
+    private async Task ConfirmarEliminar(Litigio l)
+    {
+        bool? confirmado = await DialogService.Confirm(
+            $"¿Está seguro de eliminar el litigio sobre la marca '{l.MarcaEnConflicto}'?",
+            "Confirmar Eliminación",
+            new ConfirmOptions { OkButtonText = "Eliminar", CancelButtonText = "Cancelar" }
+        );
+
+        if (confirmado == true)
+        {
+            await LitigioService.EliminarLitigioAsync(l.Id);
+            NotificationService.Notify(NotificationSeverity.Info, "Eliminado", "Registro de litigio eliminado.");
+            await CargarDatos();
+        }
+    }
+
+    private void AbrirModalRecurso(Litigio l)
+    {
+        litigioRecurso = l;
+        tipoRecursoSeleccionado = EstadoLitigio.RecurridoReposicion;
+        fechaNotificacionRecurso = DateTime.Today;
+        usuarioRecurso = l.AbogadoLitigante ?? "Abg. Carlos Mendoza (Litigios)";
+        mostrarModalRecurso = true;
+    }
+
+    private async Task EjecutarInterposicionRecurso()
+    {
+        if (litigioRecurso == null) return;
+
+        await LitigioService.RegistrarRecursoAsync(litigioRecurso.Id, tipoRecursoSeleccionado, fechaNotificacionRecurso, usuarioRecurso);
+        NotificationService.Notify(NotificationSeverity.Success, "Recurso Interpuesto", "Se actualizó el término fatal y la bitácora procesal del litigio.");
+        mostrarModalRecurso = false;
+        await CargarDatos();
+    }
+
+    private string ObtenerNombreTipoLitigio(TipoLitigio tipo)
+    {
+        return tipo switch
+        {
+            TipoLitigio.ContestacionObjecionFondo => "Contestación Objeción Fondo (60 d)",
+            TipoLitigio.OposicionDefensa => "Oposición en Defensa (10 d)",
+            TipoLitigio.OposicionAtaque => "Oposición en Ataque (30 d post-aviso)",
+            TipoLitigio.AccionCancelacionPorNoUso => "Cancelación por No Uso (3 años)",
+            TipoLitigio.AccionNulidad => "Acción de Nulidad de Registro",
+            _ => tipo.ToString()
+        };
+    }
+
+    private string ObtenerBadgeClaseTipoLitigio(TipoLitigio tipo)
+    {
+        return tipo switch
+        {
+            TipoLitigio.ContestacionObjecionFondo => "bg-warning text-dark border",
+            TipoLitigio.OposicionDefensa => "bg-danger text-white",
+            TipoLitigio.OposicionAtaque => "bg-primary text-white",
+            TipoLitigio.AccionCancelacionPorNoUso => "bg-dark text-white",
+            TipoLitigio.AccionNulidad => "text-white",
+            _ => "bg-secondary text-white"
+        };
+    }
+
+    private string ObtenerNombreEstadoLitigio(EstadoLitigio estado)
+    {
+        return estado switch
+        {
+            EstadoLitigio.BorradorEstrategia => "Borrador de Estrategia",
+            EstadoLitigio.PendienteAutorizacionCliente => "Pendiente Autorización Cliente",
+            EstadoLitigio.PresentadoAnteDIGEPIH => "Presentado ante DIGEPIH",
+            EstadoLitigio.PeriodoProbatorio => "Período Probatorio",
+            EstadoLitigio.AlegatosFinales => "Alegatos Finales",
+            EstadoLitigio.RecurridoReposicion => "Recurrido en Reposición (10 d)",
+            EstadoLitigio.RecurridoApelacion => "Recurrido en Apelación (3 d)",
+            EstadoLitigio.EnContenciosoAdministrativo => "En Contencioso-Administrativo (30 d)",
+            EstadoLitigio.ResueltoFavorable => "Resuelto Favorable",
+            EstadoLitigio.ResueltoDesfavorable => "Resuelto Desfavorable",
+            _ => estado.ToString()
+        };
+    }
+
+    private string ObtenerBadgeClaseEstadoLitigio(EstadoLitigio estado)
+    {
+        return estado switch
+        {
+            EstadoLitigio.BorradorEstrategia => "bg-light text-dark border",
+            EstadoLitigio.PendienteAutorizacionCliente => "bg-warning text-dark border",
+            EstadoLitigio.PresentadoAnteDIGEPIH => "bg-info text-white",
+            EstadoLitigio.PeriodoProbatorio => "bg-primary text-white",
+            EstadoLitigio.AlegatosFinales => "text-white",
+            EstadoLitigio.RecurridoReposicion => "bg-warning text-dark border",
+            EstadoLitigio.RecurridoApelacion => "bg-danger text-white",
+            EstadoLitigio.EnContenciosoAdministrativo => "bg-dark text-white",
+            EstadoLitigio.ResueltoFavorable => "bg-success text-white",
+            EstadoLitigio.ResueltoDesfavorable => "bg-secondary text-white",
+            _ => "bg-light text-dark"
+        };
+    }
+}

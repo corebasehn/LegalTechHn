@@ -1,0 +1,11 @@
+**/.git
+**/.vs
+**/bin
+**/obj
+**/*.db
+**/*.db-shm
+**/*.db-wal
+feadback/
+.gitignore
+.dockerignore
+README.md

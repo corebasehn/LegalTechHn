@@ -1,0 +1,593 @@
+@page "/expedientes"
+@rendermode InteractiveServer
+@using LegalTech.Web.Domain.Entities
+@using LegalTech.Web.Domain.Enums
+@using LegalTech.Web.Services
+@inject ExpedienteService ExpedienteService
+@inject ClienteService ClienteService
+@inject CatalogoService CatalogoService
+@inject PlazosService PlazosService
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Expedientes Marcarios - LegalTech Honduras</PageTitle>
+
+<div class="w-100 p-2 p-md-3">
+    <!-- Encabezado Responsive -->
+    <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3">
+        <div>
+            <RadzenText TextStyle="TextStyle.H5" TagName="TagName.H1" Class="m-0 text-primary fw-bold">
+                <RadzenIcon Icon="gavel" Class="me-1" /> Expedientes Marcarios (DIGEPIH)
+            </RadzenText>
+            <RadzenText TextStyle="TextStyle.Caption" Class="text-muted m-0">
+                Control de solicitudes, plazos perentorios, publicaciones y litigios en Honduras
+            </RadzenText>
+        </div>
+        <RadzenButton Icon="add_circle" Text="Nueva Solicitud" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Medium" Click="@AbrirFormularioNuevo" Class="shadow-sm" />
+    </div>
+
+    <!-- TARJETAS DE CONTROL Y SEMÁFORO DE PLAZOS PROCESALES (ART. 42 LPA) CON FILTRADO INTERACTIVO -->
+    <RadzenRow Gap="0.75rem" Class="mb-3">
+        <!-- 1. TOTAL EXPEDIENTES -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltro("todos"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("todos", "#0d6efd")">
+                <div>
+                    <span class="text-muted small d-block">📁 Todos</span>
+                    <strong class="fs-4 text-dark">@expedientes.Count</strong>
+                </div>
+                <RadzenIcon Icon="folder" Class="text-primary fs-2" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <!-- 2. ROJO: CRÍTICOS (<= 5 DÍAS) -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltro("criticos"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("criticos", "var(--rz-danger, #dc3545)")">
+                <div>
+                    <span class="text-muted small d-block">🔴 Críticos (&le; 5 d)</span>
+                    <strong class="fs-4 text-danger">@totalCriticos</strong>
+                </div>
+                <RadzenIcon Icon="report_problem" Class="text-danger fs-2" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <!-- 3. ÁMBAR: ALERTA (6 A 15 DÍAS) -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltro("alertas"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("alertas", "var(--rz-warning, #ffc107)")">
+                <div>
+                    <span class="text-muted small d-block">🟡 Alerta (6-15 d)</span>
+                    <strong class="fs-4 text-warning">@totalAlertas</strong>
+                </div>
+                <RadzenIcon Icon="schedule" Class="text-warning fs-2" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <!-- 4. VERDE: EN PLAZO (> 15 DÍAS) -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltro("enplazo"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("enplazo", "var(--rz-success, #28a745)")">
+                <div>
+                    <span class="text-muted small d-block">🟢 En Plazo (> 15 d)</span>
+                    <strong class="fs-4 text-success">@totalEnPlazo</strong>
+                </div>
+                <RadzenIcon Icon="check_circle" Class="text-success fs-2" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <!-- 5. NEGRO: VENCIDOS (MORA / CADUCIDAD) -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltro("vencidos"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("vencidos", "#212529")">
+                <div>
+                    <span class="text-muted small d-block">⚫ Vencidos (Mora)</span>
+                    <strong class="fs-4 text-dark">@totalVencidos</strong>
+                </div>
+                <RadzenIcon Icon="error" Class="text-dark fs-2" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <!-- 6. BLANCO / GRIS: SIN PLAZOS / AL DÍA -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltro("sintermino"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between" 
+                        Style="@ObtenerEstiloCard("sintermino", "var(--rz-info, #17a2b8)")">
+                <div>
+                    <span class="text-muted small d-block">⚪ Al Día / Sin Plazo</span>
+                    <strong class="fs-4 text-secondary">@totalSinPlazos</strong>
+                </div>
+                <RadzenIcon Icon="verified" Class="text-info fs-2" />
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <!-- BANNER DE FILTRO ACTIVO -->
+    @if (filtroSemaforo != "todos")
+    {
+        <div class="alert alert-light border py-2 px-3 d-flex align-items-center justify-content-between mb-3 shadow-sm rounded">
+            <div class="d-flex align-items-center gap-2">
+                <RadzenIcon Icon="filter_alt" Class="text-primary" />
+                <span>
+                    Filtro activo: <b>@ObtenerTituloFiltro()</b> &mdash; 
+                    Mostrando <span class="badge bg-primary">@expedientesFiltrados.Count</span> de @expedientes.Count expedientes
+                </span>
+            </div>
+            <RadzenButton Icon="close" Text="Quitar filtro (Ver todos)" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                          Click="@(() => SeleccionarFiltro("todos"))" Class="shadow-none border" />
+        </div>
+    }
+
+    <!-- Formulario Desplegable con Selects Parametrizables -->
+    @if (mostrarFormulario)
+    {
+        <RadzenCard Class="mb-3 p-3 p-md-4 shadow-sm border border-primary">
+            <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
+                <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                    <RadzenIcon Icon="assignment" Class="me-1" /> Registro de Nueva Solicitud de Marca
+                </RadzenText>
+                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => mostrarFormulario = false)" />
+            </div>
+
+            <RadzenTemplateForm TItem="Expediente" Data="@nuevoExpediente" Submit="@GuardarExpediente">
+                <RadzenRow Gap="0.75rem">
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <span class="small text-muted">Titular / Solicitante (Cliente)</span>
+                            <a href="/clientes" target="_blank" class="small text-primary text-decoration-none">
+                                <RadzenIcon Icon="people" Style="font-size: 0.85rem;" /> Administrar Clientes
+                            </a>
+                        </div>
+                        <RadzenDropDown @bind-Value="nuevoExpediente.ClienteId" Data="@clientes" TextProperty="NombreRazonSocial" ValueProperty="Id" 
+                                        AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Class="w-100" />
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Denominación de la Marca" Class="w-100">
+                            <RadzenTextBox @bind-Value="nuevoExpediente.DenominacionMarca" Placeholder="Ej: CAFE COPAN ORO" Class="w-100" Required="true" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <!-- SELECT DE TIPO DE SIGNO (DESDE TABLA EN BASE DE DATOS) -->
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Tipo de Signo (Tabla en BD)" Class="w-100">
+                            <RadzenDropDown @bind-Value="nuevoExpediente.TipoSignoId" 
+                                            Data="@tiposSigno" 
+                                            TextProperty="Nombre" 
+                                            ValueProperty="Id" 
+                                            AllowFiltering="true"
+                                            FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                            Class="w-100" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <!-- SELECT2 BUSCADOR DE CLASE DE NIZA -->
+                    <RadzenColumn Size="12" SizeMD="8">
+                        <RadzenFormField Text="Clase Internacional de Niza (Buscador Select2)" Class="w-100">
+                            <RadzenDropDown @bind-Value="nuevoExpediente.ClaseNiza" 
+                                            Data="@catalogoNiza" 
+                                            TextProperty="DisplayText" 
+                                            ValueProperty="Numero" 
+                                            AllowFiltering="true" 
+                                            FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" 
+                                            FilterOperator="StringFilterOperator.Contains"
+                                            Placeholder="Escribe para buscar... (ej: 25, café, ropa, software, servicios)" 
+                                            Class="w-100" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="No. Expediente DIGEPIH (Opcional si ya se presentó)" Class="w-100">
+                            <RadzenTextBox @bind-Value="nuevoExpediente.NumeroExpedienteDIGEPIH" Placeholder="Ej: 2026-00456" Class="w-100" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <div class="p-2 border rounded bg-light">
+                            <RadzenText TextStyle="TextStyle.Caption" Class="fw-bold mb-1">Requisitos Físicos de Presentación</RadzenText>
+                            <div class="d-flex flex-wrap gap-3 align-items-center">
+                                <div>
+                                    <RadzenCheckBox @bind-Value="nuevoExpediente.TimbreL50Pagado" Name="timbre" />
+                                    <RadzenLabel Text="Timbre L 50.00" Component="timbre" Class="ms-1" />
+                                </div>
+                                <div>
+                                    <RadzenCheckBox @bind-Value="nuevoExpediente.EtiquetasFisicas2x4Entregadas" Name="etiquetas" />
+                                    <RadzenLabel Text="20 Etiquetas 2 x 4" Component="etiquetas" Class="ms-1" />
+                                </div>
+                            </div>
+                        </div>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12">
+                        <RadzenAlert AlertStyle="AlertStyle.Warning" Variant="Variant.Flat" Size="AlertSize.Small" Class="mb-1" AllowClose="false">
+                            <b>Criterio Oficial de DIGEPIH Honduras:</b> Debe redactar una lista específica de productos o servicios. Se prohíben generalidades.
+                        </RadzenAlert>
+                        <RadzenFormField Text="Descripción Específica de Productos / Servicios" Class="w-100">
+                            <RadzenTextArea @bind-Value="nuevoExpediente.DescripcionEspecificaProductosServicios" Rows="2" Class="w-100" Placeholder="Detalle específico de los bienes o servicios..." />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12">
+                        <div class="p-2 border rounded bg-light">
+                            <RadzenText TextStyle="TextStyle.Caption" Class="fw-bold mb-1">Prioridad Internacional (Convenio de París)</RadzenText>
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <RadzenCheckBox @bind-Value="nuevoExpediente.ReivindicaPrioridad" Name="prio" />
+                                <RadzenLabel Text="¿Reivindica prioridad?" Component="prio" />
+                            </div>
+                            @if (nuevoExpediente.ReivindicaPrioridad)
+                            {
+                                <div class="d-flex gap-2">
+                                    <RadzenTextBox @bind-Value="nuevoExpediente.PaisPrioridad" Placeholder="País origen" Class="w-50" />
+                                    <RadzenDatePicker @bind-Value="nuevoExpediente.FechaPrioridad" Placeholder="Fecha origen" Class="w-50" />
+                                </div>
+                            }
+                        </div>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" Class="text-end mt-2">
+                        <RadzenButton ButtonType="ButtonType.Submit" Icon="save" Text="Guardar Expediente" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Class="me-2" />
+                        <RadzenButton ButtonType="ButtonType.Button" Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => mostrarFormulario = false)" />
+                    </RadzenColumn>
+                </RadzenRow>
+            </RadzenTemplateForm>
+        </RadzenCard>
+    }
+
+    <!-- Tabla Maestra Responsive con Scroll Interno Aislado -->
+    <RadzenCard Class="p-2 p-md-3 shadow-sm border-0">
+        @if (cargando)
+        {
+            <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" Class="my-3" />
+        }
+        else
+        {
+            <div class="table-responsive w-100" style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+                <RadzenDataGrid Data="@expedientesFiltrados" TItem="Expediente" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="8" 
+                                FilterMode="FilterMode.SimpleWithMenu" 
+                                EmptyText="@(filtroSemaforo != "todos" ? $"No se encontraron expedientes con el filtro '{ObtenerTituloFiltro()}'." : "No hay expedientes marcarios registrados aún.")" 
+                                RowSelect="@((Expediente e) => NavigationManager.NavigateTo($"/expedientes/{e.Id}"))"
+                                Style="min-width: 1060px; width: 100%; cursor: pointer;">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="Expediente" Property="CodigoInterno" Title="Código" Width="145px">
+                            <Template Context="e">
+                                <a href="@($"/expedientes/{e.Id}")" class="badge bg-dark font-monospace text-decoration-none" title="Ver ficha del expediente" 
+                                   style="font-size: 0.78rem; padding: 5px 8px; white-space: nowrap; letter-spacing: 0.5px;">
+                                    @e.CodigoInterno
+                                </a>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Expediente" Property="DenominacionMarca" Title="Marca / Signo" Width="220px">
+                            <Template Context="e">
+                                <a href="@($"/expedientes/{e.Id}")" class="fw-bold text-primary text-decoration-none text-truncate d-block" style="max-width: 210px;" title="@e.DenominacionMarca">
+                                    @e.DenominacionMarca
+                                </a>
+                                <span class="badge bg-light text-dark border" style="font-size: 0.65rem;">
+                                    @(e.TipoSigno?.Nombre ?? "No definido")
+                                </span>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Expediente" Property="Cliente.NombreRazonSocial" Title="Titular" Width="170px">
+                            <Template Context="e">
+                                <div class="text-truncate" style="max-width: 160px;" title="@e.Cliente?.NombreRazonSocial">
+                                    @e.Cliente?.NombreRazonSocial
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- COLUMNA CLASE NIZA ESTILIZADA COMO MARCA / SIGNO -->
+                        <RadzenDataGridColumn TItem="Expediente" Property="ClaseNiza" Title="Clase Niza" Width="210px">
+                            <Template Context="e">
+                                <div class="d-flex align-items-center gap-1 mb-1">
+                                    <RadzenBadge BadgeStyle="BadgeStyle.Info" Text="@($"Clase {e.ClaseNiza:D2}")" Size="BadgeSize.Small" />
+                                    <span class="badge bg-light text-secondary border" style="font-size: 0.62rem;">
+                                        @(e.ClaseNiza <= 34 ? "Producto" : "Servicio")
+                                    </span>
+                                </div>
+                                <span class="badge bg-light text-dark border text-truncate d-block" 
+                                      style="font-size: 0.65rem; max-width: 195px; font-weight: normal;" 
+                                      title="@ObtenerDetalleClase(e.ClaseNiza)">
+                                    @ObtenerNombreClase(e.ClaseNiza)
+                                </span>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Expediente" Property="NumeroExpedienteDIGEPIH" Title="No. DIGEPIH" Width="110px">
+                            <Template Context="e">
+                                <small class="text-muted">
+                                    @(string.IsNullOrWhiteSpace(e.NumeroExpedienteDIGEPIH) ? "Pendiente" : e.NumeroExpedienteDIGEPIH)
+                                </small>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Expediente" Property="EstadoProcesal.Nombre" Title="Estado Procesal" Width="210px">
+                            <Template Context="e">
+                                <RadzenBadge BadgeStyle="@GetBadgeStyleFromColor(e.EstadoProcesal?.ColorBadge)" 
+                                             Text="@(e.EstadoProcesal?.Nombre ?? "Recepción de Instrucciones")" 
+                                             Size="BadgeSize.Small" />
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Expediente" Title="Término Fatal (Art. 42 LPA)" Width="230px">
+                            <Template Context="e">
+                                @if (semaforosExpedientes.TryGetValue(e.Id, out var info) && info.Plazo != null && info.Semaforo != null)
+                                {
+                                    <div>
+                                        <RadzenBadge BadgeStyle="@GetBadgeStyleFromColor(info.Semaforo.ColorBadge)" 
+                                                     Text="@info.Semaforo.TextoBadge" Size="BadgeSize.Small" />
+                                        <div class="small text-muted text-truncate mt-1" style="max-width: 215px;" title="@info.Plazo.Concepto">
+                                            @info.Plazo.Concepto
+                                        </div>
+                                        <div class="text-muted" style="font-size: 0.68rem;">
+                                            Vence: <b>@info.Plazo.FechaVencimientoFatal.ToString("dd/MM/yyyy")</b>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-light text-secondary border" style="font-size: 0.72rem; padding: 4px 6px;">
+                                        <RadzenIcon Icon="check_circle" Style="font-size: 0.75rem; vertical-align: middle;" Class="text-success me-1" />
+                                        Sin plazos perentorios
+                                    </span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Expediente" Title="Requisitos" Width="95px" TextAlign="TextAlign.Center">
+                            <Template Context="e">
+                                <span title="Timbre L 50.00" class="badge @(e.TimbreL50Pagado ? "bg-success" : "bg-secondary")" style="font-size: 0.65rem;">L50</span>
+                                <span title="20 Etiquetas Físicas 2x4" class="badge @(e.EtiquetasFisicas2x4Entregadas ? "bg-success" : "bg-secondary")" style="font-size: 0.65rem;">20 ETIQ</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Expediente" Title="Acción" Width="100px" TextAlign="TextAlign.Center">
+                            <Template Context="e">
+                                <RadzenButton Icon="visibility" Text="Ficha" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
+                                              Click="@(() => NavigationManager.NavigateTo($"/expedientes/{e.Id}"))" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </div>
+        }
+    </RadzenCard>
+</div>
+
+@code {
+    private List<Expediente> expedientes = new();
+    private List<Expediente> expedientesFiltrados = new();
+    private List<Cliente> clientes = new();
+    private List<TipoSigno> tiposSigno = new();
+    private List<ClaseNizaItem> catalogoNiza = ClaseNizaItem.ObtenerCatalogoCompleto();
+    private Expediente nuevoExpediente = new();
+    private bool cargando = true;
+    private bool mostrarFormulario = false;
+
+    private Dictionary<Guid, (PlazoLegal? Plazo, SemaforoPlazo? Semaforo)> semaforosExpedientes = new();
+    private string filtroSemaforo = "todos"; // "todos", "criticos", "alertas", "enplazo", "vencidos", "sintermino"
+    private int totalCriticos = 0;
+    private int totalAlertas = 0;
+    private int totalEnPlazo = 0;
+    private int totalVencidos = 0;
+    private int totalSinPlazos = 0;
+
+    [SupplyParameterFromQuery(Name = "filtro")]
+    public string? FiltroUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "nuevo")]
+    public bool? AbrirNuevoUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrEmpty(FiltroUrl) && FiltroUrl != filtroSemaforo)
+        {
+            filtroSemaforo = FiltroUrl;
+            ActualizarFiltro();
+        }
+        if (AbrirNuevoUrl == true && !mostrarFormulario && clientes.Any())
+        {
+            AbrirFormularioNuevo();
+        }
+    }
+
+    private async Task CargarDatos()
+    {
+        cargando = true;
+        clientes = await ClienteService.GetClientesAsync();
+        tiposSigno = await CatalogoService.GetTiposSignoAsync(soloActivos: true);
+        expedientes = await ExpedienteService.GetExpedientesAsync();
+
+        semaforosExpedientes.Clear();
+        totalCriticos = 0;
+        totalAlertas = 0;
+        totalEnPlazo = 0;
+        totalVencidos = 0;
+        totalSinPlazos = 0;
+
+        foreach (var exp in expedientes)
+        {
+            var pendiente = exp.PlazosLegales
+                .Where(p => !p.Cumplido)
+                .OrderBy(p => p.FechaVencimientoFatal)
+                .FirstOrDefault();
+
+            if (pendiente != null)
+            {
+                int dias = await PlazosService.CalcularDiasHabilesRestantesAsync(pendiente.FechaVencimientoFatal);
+                var sem = PlazosService.EvaluarSemaforo(dias, false);
+                semaforosExpedientes[exp.Id] = (pendiente, sem);
+
+                if (sem.NivelRiesgo == "Vencido")
+                    totalVencidos++;
+                else if (sem.NivelRiesgo == "Critico")
+                    totalCriticos++;
+                else if (sem.NivelRiesgo == "Alerta")
+                    totalAlertas++;
+                else if (sem.NivelRiesgo == "Normal")
+                    totalEnPlazo++;
+                else
+                    totalSinPlazos++;
+            }
+            else
+            {
+                semaforosExpedientes[exp.Id] = (null, null);
+                totalSinPlazos++;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(FiltroUrl))
+        {
+            filtroSemaforo = FiltroUrl;
+        }
+        ActualizarFiltro();
+        if (AbrirNuevoUrl == true && !mostrarFormulario && clientes.Any())
+        {
+            AbrirFormularioNuevo();
+        }
+        cargando = false;
+    }
+
+    private void SeleccionarFiltro(string filtro)
+    {
+        if (filtroSemaforo == filtro && filtro != "todos")
+        {
+            filtroSemaforo = "todos"; // Re-click quita el filtro y vuelve a todos
+        }
+        else
+        {
+            filtroSemaforo = filtro;
+        }
+        ActualizarFiltro();
+    }
+
+    private void ActualizarFiltro()
+    {
+        if (filtroSemaforo == "criticos")
+        {
+            expedientesFiltrados = expedientes.Where(e =>
+                semaforosExpedientes.TryGetValue(e.Id, out var info) &&
+                info.Semaforo != null &&
+                info.Semaforo.NivelRiesgo == "Critico").ToList();
+        }
+        else if (filtroSemaforo == "alertas")
+        {
+            expedientesFiltrados = expedientes.Where(e =>
+                semaforosExpedientes.TryGetValue(e.Id, out var info) &&
+                info.Semaforo != null &&
+                info.Semaforo.NivelRiesgo == "Alerta").ToList();
+        }
+        else if (filtroSemaforo == "enplazo")
+        {
+            expedientesFiltrados = expedientes.Where(e =>
+                semaforosExpedientes.TryGetValue(e.Id, out var info) &&
+                info.Semaforo != null &&
+                info.Semaforo.NivelRiesgo == "Normal").ToList();
+        }
+        else if (filtroSemaforo == "vencidos")
+        {
+            expedientesFiltrados = expedientes.Where(e =>
+                semaforosExpedientes.TryGetValue(e.Id, out var info) &&
+                info.Semaforo != null &&
+                info.Semaforo.NivelRiesgo == "Vencido").ToList();
+        }
+        else if (filtroSemaforo == "sintermino")
+        {
+            expedientesFiltrados = expedientes.Where(e =>
+                !semaforosExpedientes.TryGetValue(e.Id, out var info) ||
+                info.Semaforo == null ||
+                info.Semaforo.NivelRiesgo == "Cumplido").ToList();
+        }
+        else
+        {
+            expedientesFiltrados = expedientes.ToList();
+        }
+    }
+
+    private string ObtenerTituloFiltro()
+    {
+        return filtroSemaforo switch
+        {
+            "criticos" => "🔴 Términos Críticos (≤ 5 días hábiles)",
+            "alertas" => "🟡 En Alerta (6 a 15 días hábiles)",
+            "enplazo" => "🟢 En Plazo / Normal (> 15 días hábiles)",
+            "vencidos" => "⚫ Términos Vencidos (En Mora Procesal)",
+            "sintermino" => "⚪ Al Día / Sin Plazos Fatales Corriendo",
+            _ => "Todos los Expedientes"
+        };
+    }
+
+    private string ObtenerEstiloCard(string filtro, string accentColor)
+    {
+        bool esActivo = filtroSemaforo == filtro;
+        if (esActivo)
+        {
+            return $"cursor: pointer; transition: all 0.2s ease-in-out; border: 2.5px solid {accentColor} !important; box-shadow: 0 4px 14px rgba(0,0,0,0.16) !important; transform: translateY(-2px); border-radius: 8px;";
+        }
+        return "cursor: pointer; transition: all 0.2s ease-in-out; border: 2.5px solid transparent !important; border-radius: 8px;";
+    }
+
+    private void AbrirFormularioNuevo()
+    {
+        nuevoExpediente = new Expediente
+        {
+            ClienteId = clientes.FirstOrDefault()?.Id ?? Guid.Empty,
+            TipoSignoId = tiposSigno.FirstOrDefault(t => t.Nombre.Contains("Mixta"))?.Id ?? tiposSigno.FirstOrDefault()?.Id ?? 1,
+            ClaseNiza = 25,
+            TimbreL50Pagado = true,
+            EtiquetasFisicas2x4Entregadas = true
+        };
+        mostrarFormulario = true;
+    }
+
+    private async Task GuardarExpediente()
+    {
+        if (string.IsNullOrWhiteSpace(nuevoExpediente.DenominacionMarca))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el nombre de la marca.");
+            return;
+        }
+
+        await ExpedienteService.CrearExpedienteAsync(nuevoExpediente);
+        NotificationService.Notify(NotificationSeverity.Success, "Éxito", $"Expediente {nuevoExpediente.CodigoInterno} creado correctamente.");
+        mostrarFormulario = false;
+        await CargarDatos();
+    }
+
+    private string ObtenerDetalleClase(int numero)
+    {
+        var clase = catalogoNiza.FirstOrDefault(c => c.Numero == numero);
+        return clase != null ? $"{clase.Nombre} ({clase.Categoria})" : $"Clase {numero}";
+    }
+
+    private string ObtenerNombreClase(int numero)
+    {
+        var clase = catalogoNiza.FirstOrDefault(c => c.Numero == numero);
+        return clase?.Nombre ?? $"Clase {numero}";
+    }
+
+    private BadgeStyle GetBadgeStyleFromColor(string? color)
+    {
+        return color?.ToLowerInvariant() switch
+        {
+            "success" => BadgeStyle.Success,
+            "warning" => BadgeStyle.Warning,
+            "danger" => BadgeStyle.Danger,
+            "dark" => BadgeStyle.Dark,
+            "info" => BadgeStyle.Info,
+            "secondary" => BadgeStyle.Secondary,
+            _ => BadgeStyle.Primary
+        };
+    }
+}

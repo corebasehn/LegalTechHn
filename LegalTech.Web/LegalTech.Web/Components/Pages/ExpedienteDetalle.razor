@@ -1,0 +1,1294 @@
+@page "/expedientes/{Id:guid}"
+@rendermode InteractiveServer
+@using LegalTech.Web.Domain.Entities
+@using LegalTech.Web.Services
+@inject ExpedienteService ExpedienteService
+@inject ClienteService ClienteService
+@inject CatalogoService CatalogoService
+@inject PlazosService PlazosService
+@inject LitigioService LitigioService
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+@inject NavigationManager NavigationManager
+
+<PageTitle>@(expediente?.DenominacionMarca ?? "Expediente") - Detalle y Línea de Tiempo</PageTitle>
+
+<div class="w-100 p-2 p-md-3">
+    <!-- Botón Volver y Breadcrumb -->
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <RadzenButton Icon="arrow_back" Text="Volver al Listado" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" 
+                      Click="@(() => NavigationManager.NavigateTo("/expedientes"))" />
+        <div class="text-muted small">
+            <RadzenIcon Icon="folder" Class="me-1" /> LegalTech Honduras / Expedientes / @(expediente?.CodigoInterno ?? "Cargando...")
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" Class="my-4" />
+    }
+    else if (expediente == null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat">
+            El expediente solicitado no existe o fue eliminado.
+        </RadzenAlert>
+    }
+    else
+    {
+        @if (plazoMasUrgente.Plazo != null && plazoMasUrgente.Semaforo != null)
+        {
+            <RadzenAlert AlertStyle="@(plazoMasUrgente.Semaforo.NivelRiesgo == "Critico" || plazoMasUrgente.Semaforo.NivelRiesgo == "Vencido" ? AlertStyle.Danger : plazoMasUrgente.Semaforo.NivelRiesgo == "Alerta" ? AlertStyle.Warning : AlertStyle.Success)" 
+                         Variant="@(plazoMasUrgente.Semaforo.NivelRiesgo == "Critico" ? Variant.Filled : Variant.Flat)" 
+                         Class="mb-3 shadow-sm border-0" AllowClose="false">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <RadzenIcon Icon="@plazoMasUrgente.Semaforo.Icono" Class="fs-3" />
+                        <div>
+                            <strong>TÉRMINO FATAL EN CURSO (Art. 42 LPA):</strong> @plazoMasUrgente.Plazo.Concepto &mdash; 
+                            <span class="badge @(plazoMasUrgente.Semaforo.NivelRiesgo == "Critico" ? "bg-white text-danger fw-bold" : "bg-dark text-white")">
+                                @plazoMasUrgente.Semaforo.TextoBadge
+                            </span> 
+                            (Vence: <u>@plazoMasUrgente.Plazo.FechaVencimientoFatal.ToString("dd/MM/yyyy")</u>)
+                            <div class="small mt-1">@plazoMasUrgente.Semaforo.MensajeAccion</div>
+                        </div>
+                    </div>
+                    <RadzenButton Icon="timer" Text="Ir a Plazos y Vencimientos" ButtonStyle="@(plazoMasUrgente.Semaforo.NivelRiesgo == "Critico" ? ButtonStyle.Light : ButtonStyle.Primary)" Size="ButtonSize.Small" 
+                                  Click="@(() => tabPrincipalIndex = 2)" />
+                </div>
+            </RadzenAlert>
+        }
+
+        <!-- Resumen Maestro Superior (Header Card) -->
+        <RadzenCard Class="mb-3 p-3 p-md-4 shadow-sm border-0 bg-white">
+            <RadzenRow AlignItems="AlignItems.Center" Gap="1rem">
+                <RadzenColumn Size="12" SizeMD="8">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <span class="badge bg-dark font-monospace fs-6 px-3 py-2">@expediente.CodigoInterno</span>
+                        <RadzenBadge BadgeStyle="@GetBadgeStyleFromColor(expediente.EstadoProcesal?.ColorBadge)" 
+                                     Text="@(expediente.EstadoProcesal?.Nombre ?? "En Trámite")" 
+                                     Size="BadgeSize.Medium" Class="px-2 py-1" />
+                        <span class="badge bg-secondary-subtle text-secondary border">Fase: @(expediente.EstadoProcesal?.Fase ?? "Apertura")</span>
+                    </div>
+
+                    <RadzenText TextStyle="TextStyle.H4" TagName="TagName.H1" Class="m-0 text-primary fw-bold text-break">
+                        @expediente.DenominacionMarca
+                    </RadzenText>
+
+                    <div class="d-flex flex-wrap align-items-center gap-3 mt-2 text-muted small">
+                        <div>
+                            <RadzenIcon Icon="business" Class="me-1 text-primary" />
+                            <strong>Titular:</strong> @(expediente.Cliente?.NombreRazonSocial ?? "No asignado")
+                        </div>
+                        <div>
+                            <RadzenIcon Icon="category" Class="me-1 text-info" />
+                            <strong>Tipo de Signo:</strong> @(expediente.TipoSigno?.Nombre ?? "No definido")
+                        </div>
+                        <div>
+                            <RadzenIcon Icon="tag" Class="me-1 text-success" />
+                            <strong>Clase Niza:</strong> Clase @expediente.ClaseNiza (@ObtenerDetalleClase(expediente.ClaseNiza))
+                        </div>
+                    </div>
+                </RadzenColumn>
+
+                <RadzenColumn Size="12" SizeMD="4" Class="text-md-end border-start-md ps-md-3">
+                    <div class="p-2 rounded bg-light text-start mb-2">
+                        <small class="text-muted d-block">Presentación Oficial DIGEPIH</small>
+                        <strong class="fs-6 text-dark">
+                            @(string.IsNullOrWhiteSpace(expediente.NumeroExpedienteDIGEPIH) ? "Sin No. Oficial Asignado" : $"No. {expediente.NumeroExpedienteDIGEPIH}")
+                        </strong>
+                        <div class="small text-muted">
+                            Fecha: @(expediente.FechaPresentacionOficial?.ToString("dd/MM/yyyy") ?? "Pendiente")
+                        </div>
+                    </div>
+
+                    <!-- Selector Rápido de Cambio de Estado Procesal (desde tabla en BD) -->
+                    <div class="d-flex align-items-center justify-content-md-end gap-2">
+                        <span class="small text-muted">Cambiar Estado:</span>
+                        <RadzenDropDown TValue="int" Value="@expediente.EstadoProcesalId" 
+                                        Data="@estadosProcesales" TextProperty="Nombre" ValueProperty="Id"
+                                        ValueChanged="@(async (int nuevoId) => await CambiarEstadoProcesalRapido(nuevoId))"
+                                        Style="max-width: 220px; font-size: 0.8rem;" />
+                    </div>
+                </RadzenColumn>
+            </RadzenRow>
+
+            <!-- Pipeline Visual de Fases Procesales del Trámite en Honduras -->
+            <div class="d-none d-lg-flex align-items-center justify-content-between p-2 mt-3 bg-light rounded border">
+                <div class="text-center flex-fill px-2 py-1 rounded @GetFaseClass("Apertura")">
+                    <RadzenIcon Icon="folder_open" Class="d-block mx-auto mb-1 fs-5" />
+                    <small class="fw-bold">1. Apertura / Búsqueda</small>
+                </div>
+                <RadzenIcon Icon="chevron_right" Class="text-muted" />
+                <div class="text-center flex-fill px-2 py-1 rounded @GetFaseClass("Presentación")">
+                    <RadzenIcon Icon="assignment_turned_in" Class="d-block mx-auto mb-1 fs-5" />
+                    <small class="fw-bold">2. Presentación DIGEPIH</small>
+                </div>
+                <RadzenIcon Icon="chevron_right" Class="text-muted" />
+                <div class="text-center flex-fill px-2 py-1 rounded @GetFaseClass("Examen")">
+                    <RadzenIcon Icon="rule" Class="d-block mx-auto mb-1 fs-5" />
+                    <small class="fw-bold">3. Examen (Forma/Fondo)</small>
+                </div>
+                <RadzenIcon Icon="chevron_right" Class="text-muted" />
+                <div class="text-center flex-fill px-2 py-1 rounded @(GetFaseClass("Publicación") != "" ? GetFaseClass("Publicación") : GetFaseClass("Oposición"))">
+                    <RadzenIcon Icon="newspaper" Class="d-block mx-auto mb-1 fs-5" />
+                    <small class="fw-bold">4. Publicación La Gaceta</small>
+                </div>
+                <RadzenIcon Icon="chevron_right" Class="text-muted" />
+                <div class="text-center flex-fill px-2 py-1 rounded @(GetFaseClass("Concesión") != "" ? GetFaseClass("Concesión") : GetFaseClass("Vigilancia"))">
+                    <RadzenIcon Icon="workspace_premium" Class="d-block mx-auto mb-1 fs-5" />
+                    <small class="fw-bold">5. Concesión y Título</small>
+                </div>
+            </div>
+        </RadzenCard>
+
+        <!-- Pestañas Modulares del Expediente Marcario -->
+        <RadzenTabs @bind-SelectedIndex="tabPrincipalIndex" RenderMode="TabRenderMode.Client" Class="shadow-sm bg-white rounded">
+            <Tabs>
+                <!-- PESTAÑA 1: FICHA REGISTRAL Y PRESENTACIÓN DIGEPIH -->
+                <RadzenTabsItem Text="Ficha y Presentación DIGEPIH" Icon="description">
+                    <div class="p-3">
+                        <RadzenTemplateForm TItem="Expediente" Data="@expediente" Submit="@GuardarFichaGeneral">
+                            <RadzenRow Gap="1rem">
+                                <!-- SECCIÓN 1: DATOS GENERALES DEL SIGNO -->
+                                <RadzenColumn Size="12">
+                                    <RadzenText TextStyle="TextStyle.Subtitle1" Class="fw-bold text-primary border-bottom pb-1 mb-2">
+                                        1. Datos Generales de la Solicitud y Signo Distintivo
+                                    </RadzenText>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="Titular / Solicitante (Tabla Clientes)" Class="w-100">
+                                        <RadzenDropDown @bind-Value="expediente.ClienteId" Data="@clientes" TextProperty="NombreRazonSocial" ValueProperty="Id" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="Denominación de la Marca" Class="w-100">
+                                        <RadzenTextBox @bind-Value="expediente.DenominacionMarca" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="4">
+                                    <RadzenFormField Text="Tipo de Signo (Tabla TiposSigno en BD)" Class="w-100">
+                                        <RadzenDropDown @bind-Value="expediente.TipoSignoId" Data="@tiposSigno" 
+                                                        TextProperty="Nombre" ValueProperty="Id" 
+                                                        AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="8">
+                                    <RadzenFormField Text="Clase Internacional de Niza (Buscador Select2 1 a 45)" Class="w-100">
+                                        <RadzenDropDown @bind-Value="expediente.ClaseNiza" Data="@catalogoNiza" 
+                                                        TextProperty="DisplayText" ValueProperty="Numero" 
+                                                        AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" 
+                                                        FilterOperator="StringFilterOperator.Contains" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12">
+                                    <RadzenAlert AlertStyle="AlertStyle.Info" Variant="Variant.Flat" Size="AlertSize.Small" Class="mb-1" AllowClose="false">
+                                        <b>Criterio Exigido por DIGEPIH Honduras:</b> Debe especificar detalladamente los productos o servicios. Se rechazan clasificaciones abiertas o genéricas.
+                                    </RadzenAlert>
+                                    <RadzenFormField Text="Descripción Específica de Productos y Servicios" Class="w-100">
+                                        <RadzenTextArea @bind-Value="expediente.DescripcionEspecificaProductosServicios" Rows="3" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <!-- SECCIÓN 2: PRESENTACIÓN FORMAL ANTE DIGEPIH -->
+                                <RadzenColumn Size="12" Class="mt-3">
+                                    <RadzenText TextStyle="TextStyle.Subtitle1" Class="fw-bold text-primary border-bottom pb-1 mb-2">
+                                        2. Presentación Formal y Prioridad Legal en Honduras
+                                    </RadzenText>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="4">
+                                    <RadzenFormField Text="No. Expediente DIGEPIH" Class="w-100">
+                                        <RadzenTextBox @bind-Value="expediente.NumeroExpedienteDIGEPIH" Placeholder="Ej: 2026-00482" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="4">
+                                    <RadzenFormField Text="Fecha de Presentación Oficial" Class="w-100">
+                                        <RadzenDatePicker @bind-Value="expediente.FechaPresentacionOficial" DateFormat="dd/MM/yyyy" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="4">
+                                    <RadzenFormField Text="Vía de Presentación (Tabla ViasPresentacion)" Class="w-100">
+                                        <RadzenDropDown @bind-Value="expediente.ViaPresentacionId" Data="@viasPresentacion" 
+                                                        TextProperty="Nombre" ValueProperty="Id" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12">
+                                    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 p-2 p-md-3 rounded bg-primary-subtle border border-primary-subtle">
+                                        <div>
+                                            <strong class="text-primary"><RadzenIcon Icon="verified" Class="me-1" /> Registrar Presentación Oficial ante DIGEPIH</strong>
+                                            <div class="small text-muted">
+                                                Fija la prioridad legal en Honduras, genera automáticamente el hito en la bitácora y avanza el estado a 'Presentado ante DIGEPIH'.
+                                            </div>
+                                        </div>
+                                        <RadzenButton Icon="how_to_reg" Text="Asentar Presentación Oficial" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                                      Click="@RegistrarPresentacionOficialFormal" />
+                                    </div>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <div class="p-3 border rounded bg-light h-100">
+                                        <RadzenText TextStyle="TextStyle.Caption" Class="fw-bold d-block mb-2 text-uppercase">
+                                            Requisitos Físicos Formales (Manual DIGEPIH)
+                                        </RadzenText>
+                                        <div class="d-flex flex-column gap-2">
+                                            <div>
+                                                <RadzenCheckBox @bind-Value="expediente.TimbreL50Pagado" Name="chkTimbre" />
+                                                <RadzenLabel Text="Timbre de Contratación de L 50.00 adherido" Component="chkTimbre" Class="ms-2" />
+                                            </div>
+                                            <div>
+                                                <RadzenCheckBox @bind-Value="expediente.EtiquetasFisicas2x4Entregadas" Name="chkEtiq" />
+                                                <RadzenLabel Text="20 Etiquetas Físicas formato 2 x 4 pulgadas entregadas" Component="chkEtiq" Class="ms-2" />
+                                            </div>
+                                            <div>
+                                                <RadzenCheckBox @bind-Value="expediente.TasasOficialesPagadas" Name="chkTasas" />
+                                                <RadzenLabel Text="Tasas oficiales de registro canceladas ante el IP" Component="chkTasas" Class="ms-2" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <div class="p-3 border rounded bg-light h-100">
+                                        <RadzenText TextStyle="TextStyle.Caption" Class="fw-bold d-block mb-2 text-uppercase">
+                                            Reivindicación de Prioridad (Convenio de París)
+                                        </RadzenText>
+                                        <div class="mb-2">
+                                            <RadzenCheckBox @bind-Value="expediente.ReivindicaPrioridad" Name="chkPrio" />
+                                            <RadzenLabel Text="¿Reivindica prioridad de solicitud extranjera previa?" Component="chkPrio" Class="ms-2" />
+                                        </div>
+                                        @if (expediente.ReivindicaPrioridad)
+                                        {
+                                            <div class="d-flex flex-column gap-2 mt-2">
+                                                <RadzenTextBox @bind-Value="expediente.PaisPrioridad" Placeholder="País de prioridad (ej: EE.UU., México)" Class="w-100" />
+                                                <div class="d-flex gap-2">
+                                                    <RadzenDatePicker @bind-Value="expediente.FechaPrioridad" DateFormat="dd/MM/yyyy" Placeholder="Fecha solicitud" Class="w-50" />
+                                                    <RadzenTextBox @bind-Value="expediente.NumeroSolicitudPrioridad" Placeholder="No. Solicitud extranjera" Class="w-50" />
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </RadzenColumn>
+
+                                <!-- SECCIÓN 3: RESPONSABLES INTERNOS -->
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="Abogado Responsable" Class="w-100">
+                                        <RadzenTextBox @bind-Value="expediente.AbogadoResponsable" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="Paralegal Asignado" Class="w-100">
+                                        <RadzenTextBox @bind-Value="expediente.ParalegalAsignado" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" Class="text-end mt-3">
+                                    <RadzenButton ButtonType="ButtonType.Submit" Icon="save" Text="Guardar Cambios de Ficha" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Medium" />
+                                </RadzenColumn>
+                            </RadzenRow>
+                        </RadzenTemplateForm>
+                    </div>
+                </RadzenTabsItem>
+
+                <!-- PESTAÑA 2: LÍNEA DE TIEMPO PROCESAL (TIMELINE) -->
+                <RadzenTabsItem Text="Línea de Tiempo Procesal" Icon="timeline">
+                    <div class="p-3">
+                        <RadzenRow Gap="1.5rem">
+                            <!-- Columna Izquierda: Cronología de Actuaciones -->
+                            <RadzenColumn Size="12" SizeMD="7">
+                                <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+                                    <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                                        <RadzenIcon Icon="history" Class="me-1" /> Historial de Actuaciones y Notificaciones
+                                    </RadzenText>
+                                    <span class="badge bg-light text-dark border">@expediente.Actuaciones.Count actuaciones</span>
+                                </div>
+
+                                @if (!expediente.Actuaciones.Any())
+                                {
+                                    <div class="text-center p-4 border rounded bg-light text-muted">
+                                        <RadzenIcon Icon="hourglass_empty" Style="font-size: 2rem;" />
+                                        <p class="m-0 mt-2">No hay actuaciones registradas en este expediente aún.</p>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="timeline-container d-flex flex-column gap-3">
+                                        @foreach (var act in expediente.Actuaciones.OrderByDescending(a => a.FechaActuacion))
+                                        {
+                                            <RadzenCard Class="p-3 shadow-xs border-start border-4" 
+                                                        Style="@($"border-left-color: var(--rz-{(act.TipoActuacion?.Color ?? "primary")}) !important; border-top: 1px solid #e9ecef; border-right: 1px solid #e9ecef; border-bottom: 1px solid #e9ecef;")">
+                                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                                    <div>
+                                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                                            <RadzenIcon Icon="@(act.TipoActuacion?.Icono ?? "event_note")" 
+                                                                        Class="@($"text-{(act.TipoActuacion?.Color ?? "primary")}")" />
+                                                            <strong class="text-dark fs-6">@act.Titulo</strong>
+                                                        </div>
+                                                        <span class="badge bg-light text-secondary border me-2" style="font-size: 0.7rem;">
+                                                            @(act.TipoActuacion?.Nombre ?? "Hito Procesal")
+                                                        </span>
+                                                        <small class="text-muted">
+                                                            <RadzenIcon Icon="person" Style="font-size: 0.85rem;" /> @act.UsuarioResponsable
+                                                        </small>
+                                                    </div>
+                                                    <span class="badge bg-dark font-monospace" style="font-size: 0.75rem;">
+                                                        @act.FechaActuacion.ToString("dd/MM/yyyy HH:mm")
+                                                    </span>
+                                                </div>
+
+                                                @if (!string.IsNullOrWhiteSpace(act.Comentario))
+                                                {
+                                                    <div class="mt-2 p-2 bg-light rounded text-secondary small">
+                                                        @act.Comentario
+                                                    </div>
+                                                }
+                                            </RadzenCard>
+                                        }
+                                    </div>
+                                }
+                            </RadzenColumn>
+
+                            <!-- Columna Derecha: Formulario para Agregar Nuevo Hito -->
+                            <RadzenColumn Size="12" SizeMD="5">
+                                <RadzenCard Class="p-3 p-md-4 shadow-sm border bg-light">
+                                    <RadzenText TextStyle="TextStyle.H6" Class="fw-bold text-primary mb-3">
+                                        <RadzenIcon Icon="post_add" Class="me-1" /> Registrar Nuevo Hito Procesal
+                                    </RadzenText>
+
+                                    <RadzenTemplateForm TItem="ActuacionExpediente" Data="@nuevaActuacion" Submit="@RegistrarNuevoHito">
+                                        <div class="d-flex flex-column gap-3">
+                                            <RadzenFormField Text="Tipo de Actuación (Tabla TiposActuaciones en BD)" Class="w-100">
+                                                <RadzenDropDown @bind-Value="nuevaActuacion.TipoActuacionId" 
+                                                                Data="@tiposActuaciones" TextProperty="Nombre" ValueProperty="Id"
+                                                                AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Class="w-100" />
+                                            </RadzenFormField>
+
+                                            <RadzenFormField Text="Título del Hito / Resolución" Class="w-100">
+                                                <RadzenTextBox @bind-Value="nuevaActuacion.Titulo" Placeholder="Ej: Notificación de Auto de Prevención" Class="w-100" />
+                                            </RadzenFormField>
+
+                                            <div class="d-flex gap-2">
+                                                <RadzenFormField Text="Fecha y Hora" Class="w-50">
+                                                    <RadzenDatePicker @bind-Value="nuevaActuacion.FechaActuacion" ShowTime="true" DateFormat="dd/MM/yyyy HH:mm" Class="w-100" />
+                                                </RadzenFormField>
+                                                <RadzenFormField Text="Responsable" Class="w-50">
+                                                    <RadzenTextBox @bind-Value="nuevaActuacion.UsuarioResponsable" Class="w-100" />
+                                                </RadzenFormField>
+                                            </div>
+
+                                            <RadzenFormField Text="Comentario / Fundamentación Jurídica" Class="w-100">
+                                                <RadzenTextArea @bind-Value="nuevaActuacion.Comentario" Rows="3" Placeholder="Detalle de la actuación, plazo legal otorgado o términos procesales..." Class="w-100" />
+                                            </RadzenFormField>
+
+                                            <div class="p-2 border rounded bg-white">
+                                                <RadzenText TextStyle="TextStyle.Caption" Class="fw-bold mb-1 text-muted d-block">
+                                                    ¿Avanzar Estado Procesal? (Opcional)
+                                                </RadzenText>
+                                                <RadzenDropDown @bind-Value="nuevoEstadoParaActuacion" Data="@estadosProcesales" 
+                                                                TextProperty="Nombre" ValueProperty="Id" AllowClear="true" 
+                                                                Placeholder="Dejar estado actual sin cambios" Class="w-100" />
+                                            </div>
+
+                                            <RadzenButton ButtonType="ButtonType.Submit" Icon="add_task" Text="Agregar a Línea de Tiempo" 
+                                                          ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Medium" Class="w-100 mt-2" />
+                                        </div>
+                                    </RadzenTemplateForm>
+                                </RadzenCard>
+                            </RadzenColumn>
+                        </RadzenRow>
+                    </div>
+                </RadzenTabsItem>
+
+                <!-- PESTAÑA 3: MOTOR DE PLAZOS LEGALES Y VENCIMIENTOS (ART. 42 LPA) -->
+                <RadzenTabsItem Text="Plazos y Vencimientos" Icon="timer">
+                    <div class="p-3">
+                        <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3 border-bottom pb-2">
+                            <div>
+                                <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                                    <RadzenIcon Icon="timer" Class="me-1" /> Motor de Plazos Legales y Vencimientos Fatales
+                                </RadzenText>
+                                <small class="text-muted">
+                                    Cálculo en días hábiles procesales de Honduras (Art. 42 LPA, Art. 88 LPI). Excluye automáticamente sábados, domingos y feriados nacionales.
+                                </small>
+                            </div>
+                            <RadzenButton Icon="@(mostrandoFormNuevoPlazo ? "expand_less" : "add_alarm")" 
+                                          Text="@(mostrandoFormNuevoPlazo ? "Ocultar Formulario" : "Registrar Plazo Procesal")" 
+                                          ButtonStyle="@(mostrandoFormNuevoPlazo ? ButtonStyle.Light : ButtonStyle.Success)" 
+                                          Size="ButtonSize.Small" Click="@(() => mostrandoFormNuevoPlazo = !mostrandoFormNuevoPlazo)" />
+                        </div>
+
+                        <!-- FORMULARIO DESPLEGABLE: APERTURA DE TÉRMINO FATAL -->
+                        @if (mostrandoFormNuevoPlazo)
+                        {
+                            <RadzenCard Class="p-3 mb-4 bg-light border border-primary shadow-sm">
+                                <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
+                                    <strong class="text-primary">
+                                        <RadzenIcon Icon="add_alarm" Class="me-1" /> Apertura de Término Legal Perentorio (Honduras)
+                                    </strong>
+                                    <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => mostrandoFormNuevoPlazo = false)" />
+                                </div>
+
+                                <RadzenRow Gap="1rem">
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="Tipo de Plazo / Preconfiguración Legal" Class="w-100">
+                                            <RadzenDropDown TValue="string" Value="@presetPlazoSeleccionado" 
+                                                            Data="@presetsDisponibles" TextProperty="Nombre" ValueProperty="Codigo"
+                                                            ValueChanged="@(async (string v) => await CambiarPresetPlazo(v))"
+                                                            Class="w-100" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="Concepto o Requerimiento Oficial" Class="w-100">
+                                            <RadzenTextBox @bind-Value="conceptoPlazoNuevo" Class="w-100" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+
+                                    <RadzenColumn Size="12" SizeMD="4">
+                                        <RadzenFormField Text="Fecha de Notificación Oficial" Class="w-100">
+                                            <RadzenDatePicker @bind-Value="fechaNotificacionNuevo" DateFormat="dd/MM/yyyy" 
+                                                              Change="@(async (DateTime? v) => await ActualizarProyeccionVencimiento())" Class="w-100" />
+                                        </RadzenFormField>
+                                        <small class="text-muted d-block mt-1">El cómputo inicia el día hábil siguiente (Art. 42 LPA).</small>
+                                    </RadzenColumn>
+
+                                    <RadzenColumn Size="12" SizeMD="3">
+                                        <RadzenFormField Text="Días Hábiles Otorgados" Class="w-100">
+                                            <RadzenNumeric @bind-Value="diasHabilesNuevo" Min="1" Max="365" 
+                                                           Change="@(async (int v) => await ActualizarProyeccionVencimiento())" Class="w-100" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+
+                                    <!-- WIDGET DE PROYECCIÓN AUTOMÁTICA -->
+                                    <RadzenColumn Size="12" SizeMD="5">
+                                        <div class="p-3 border rounded bg-white h-100 shadow-xs">
+                                            <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.72rem;">
+                                                <RadzenIcon Icon="event_available" Class="text-success me-1" /> Fecha Fatal Calculada
+                                            </small>
+                                            <strong class="fs-6 text-danger d-block">
+                                                @fechaFatalProyectada.ToString("dddd, dd 'de' MMMM 'de' yyyy")
+                                            </strong>
+                                            <small class="text-muted">
+                                                Excluye fines de semana y feriados oficiales de la República de Honduras.
+                                            </small>
+                                        </div>
+                                    </RadzenColumn>
+
+                                    <RadzenColumn Size="12">
+                                        <RadzenFormField Text="Observaciones / Fundamento Legal de la Notificación" Class="w-100">
+                                            <RadzenTextBox @bind-Value="observacionesPlazoNuevo" Placeholder="Ej: Auto No. 124-2026 notificado en tabla de avisos de DIGEPIH..." Class="w-100" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+
+                                    <RadzenColumn Size="12" Class="text-end">
+                                        <RadzenButton Icon="timer" Text="Registrar Término Fatal en el Expediente" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" 
+                                                      Click="@RegistrarNuevoPlazoProcesal" Class="me-2" />
+                                        <RadzenButton Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => mostrandoFormNuevoPlazo = false)" />
+                                    </RadzenColumn>
+                                </RadzenRow>
+                            </RadzenCard>
+                        }
+
+                        <!-- MODAL / FORMULARIO PARA EVACUAR PLAZO -->
+                        @if (plazoAEvacuar != null)
+                        {
+                            <RadzenCard Class="p-3 mb-4 bg-white border border-success shadow-sm">
+                                <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
+                                    <strong class="text-success">
+                                        <RadzenIcon Icon="task_alt" Class="me-1" /> Evacuación / Cumplimiento de Plazo Legal: @plazoAEvacuar.Concepto
+                                    </strong>
+                                    <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => plazoAEvacuar = null)" />
+                                </div>
+                                <p class="text-secondary small mb-2">
+                                    Registrar la fecha en que se presentó el escrito de contestación o subsanación ante DIGEPIH para cerrar el cómputo y asentar el hito en la línea de tiempo.
+                                </p>
+                                <RadzenRow Gap="1rem">
+                                    <RadzenColumn Size="12" SizeMD="4">
+                                        <RadzenFormField Text="Fecha de Presentación del Escrito" Class="w-100">
+                                            <RadzenDatePicker @bind-Value="fechaCumplimientoModal" DateFormat="dd/MM/yyyy" Class="w-100" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="8">
+                                        <RadzenFormField Text="Constancia / No. de Recibo o Resumen del Escrito" Class="w-100">
+                                            <RadzenTextBox @bind-Value="notaCumplimientoModal" Placeholder="Ej: Escrito de contestación radicado en ventanilla con copia sellada..." Class="w-100" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="12" Class="text-end">
+                                        <RadzenButton Icon="check_circle" Text="Confirmar Evacuación" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" Click="@ConfirmarEvacuacionPlazo" Class="me-2" />
+                                        <RadzenButton Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => plazoAEvacuar = null)" />
+                                    </RadzenColumn>
+                                </RadzenRow>
+                            </RadzenCard>
+                        }
+
+                        <!-- TABLA DE PLAZOS Y ESTADO DEL SEMÁFORO -->
+                        @if (!plazosExpediente.Any())
+                        {
+                            <div class="text-center p-4 border rounded bg-light text-muted">
+                                <RadzenIcon Icon="event_available" Style="font-size: 2.5rem;" Class="text-success" />
+                                <h6 class="mt-2 text-dark">Sin Plazos Fatales Pendientes</h6>
+                                <p class="m-0 small">Este expediente no tiene términos procesales pendientes de evacuación.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive w-100">
+                                <RadzenDataGrid Data="@plazosExpediente" TItem="PlazoLegal" AllowSorting="true" AllowPaging="true" PageSize="6" Style="width: 100%;">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="PlazoLegal" Property="Concepto" Title="Concepto / Término Legal" Width="260px">
+                                            <Template Context="p">
+                                                <strong>@p.Concepto</strong>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+
+                                        <RadzenDataGridColumn TItem="PlazoLegal" Property="DiasHabiles" Title="Días Hábiles" Width="100px" TextAlign="TextAlign.Center">
+                                            <Template Context="p">
+                                                <span class="badge bg-light text-dark border">@p.DiasHabiles d.h.</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+
+                                        <RadzenDataGridColumn TItem="PlazoLegal" Property="FechaInicio" Title="Notificación" Width="110px">
+                                            <Template Context="p">
+                                                @p.FechaInicio.ToString("dd/MM/yyyy")
+                                            </Template>
+                                        </RadzenDataGridColumn>
+
+                                        <RadzenDataGridColumn TItem="PlazoLegal" Property="FechaVencimientoFatal" Title="Vencimiento Fatal" Width="130px">
+                                            <Template Context="p">
+                                                <strong class="text-danger">@p.FechaVencimientoFatal.ToString("dd/MM/yyyy")</strong>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+
+                                        <!-- SEMÁFORO PROCESAL HONDUREÑO -->
+                                        <RadzenDataGridColumn TItem="PlazoLegal" Title="Semáforo / Días Restantes" Width="220px">
+                                            <Template Context="p">
+                                                @if (semaforosPlazos.TryGetValue(p.Id, out var sem))
+                                                {
+                                                    <div class="d-flex align-items-center gap-1">
+                                                        <RadzenBadge BadgeStyle="@GetBadgeStyleFromColor(sem.ColorBadge)" 
+                                                                     Text="@sem.TextoBadge" Size="BadgeSize.Small" />
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small">Calculando...</span>
+                                                }
+                                            </Template>
+                                        </RadzenDataGridColumn>
+
+                                        <RadzenDataGridColumn TItem="PlazoLegal" Property="Cumplido" Title="Estado" Width="130px" TextAlign="TextAlign.Center">
+                                            <Template Context="p">
+                                                @if (p.Cumplido)
+                                                {
+                                                    <span class="badge bg-success" title="@p.FechaCumplimiento?.ToString("dd/MM/yyyy")">
+                                                        <RadzenIcon Icon="check" Style="font-size: 0.75rem;" /> Evacuado
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning text-dark">
+                                                        <RadzenIcon Icon="pending" Style="font-size: 0.75rem;" /> En Curso
+                                                    </span>
+                                                }
+                                            </Template>
+                                        </RadzenDataGridColumn>
+
+                                        <RadzenDataGridColumn TItem="PlazoLegal" Title="Acciones" Width="140px" TextAlign="TextAlign.Center">
+                                            <Template Context="p">
+                                                @if (!p.Cumplido)
+                                                {
+                                                    <RadzenButton Icon="task_alt" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
+                                                                  Text="Evacuar" Click="@(() => AbrirModalEvacuarPlazo(p))" Class="me-1" />
+                                                }
+                                                <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.ExtraSmall" 
+                                                              Click="@(() => EliminarPlazoProcesal(p.Id))" title="Eliminar" />
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        }
+                    </div>
+                </RadzenTabsItem>
+
+                <!-- PESTAÑA 4: CICLO LA GACETA (ENAG) -->
+                <RadzenTabsItem Text="Ciclo La Gaceta (ENAG)" Icon="newspaper">
+                    <div class="p-3">
+                        <RadzenAlert AlertStyle="AlertStyle.Warning" Variant="Variant.Flat" Class="mb-3" AllowClose="false">
+                            <div class="d-flex align-items-center gap-2">
+                                <RadzenIcon Icon="warning" Class="fs-4 text-warning" />
+                                <div>
+                                    <strong>REGLA FATAL DE ABANDONO (Manual de Marcas de Honduras):</strong>
+                                    La marca debe publicarse 3 veces en <i>La Gaceta Oficial</i> (con intervalos aproximados de 15 días). 
+                                    Posteriormente, deben comprarse los <b>tres ejemplares físicos originales</b> y entregarse formalmente ante DIGEPIH. 
+                                    El incumplimiento de este depósito físico acarrea la declaratoria de abandono de la solicitud.
+                                </div>
+                            </div>
+                        </RadzenAlert>
+
+                        <RadzenTemplateForm TItem="PublicacionENAG" Data="@publicacionActual" Submit="@GuardarPublicacion">
+                            <RadzenRow Gap="1rem">
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="No. de Aviso Oficial emitido por DIGEPIH" Class="w-100">
+                                        <RadzenTextBox @bind-Value="publicacionActual.NumeroAvisoDIGEPIH" Placeholder="Ej: AV-2026-0391" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="No. de Recibo de Pago a ENAG" Class="w-100">
+                                        <RadzenTextBox @bind-Value="publicacionActual.ReciboPagoENAG" Placeholder="Ej: ENAG-REC-88492" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <!-- LAS 3 PUBLICACIONES OBLIGATORIAS -->
+                                <RadzenColumn Size="12">
+                                    <RadzenCard Class="p-3 border bg-light">
+                                        <RadzenText TextStyle="TextStyle.Subtitle2" Class="fw-bold mb-2 text-dark">
+                                            Fechas de las 3 Publicaciones Obligatorias en La Gaceta
+                                        </RadzenText>
+                                        <RadzenRow Gap="0.75rem">
+                                            <RadzenColumn Size="12" SizeMD="4">
+                                                <RadzenFormField Text="Aviso 1 (Publicación Inicial)" Class="w-100">
+                                                    <RadzenDatePicker @bind-Value="publicacionActual.FechaPublicacionAviso1" DateFormat="dd/MM/yyyy" Class="w-100" />
+                                                </RadzenFormField>
+                                                @if (!publicacionActual.FechaPublicacionAviso1.HasValue)
+                                                {
+                                                    <RadzenButton Text="Registrar Hoy Aviso 1" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" 
+                                                                  Click="@(() => RegistrarAvisoHoy(1))" Class="mt-1 w-100" />
+                                                }
+                                            </RadzenColumn>
+
+                                            <RadzenColumn Size="12" SizeMD="4">
+                                                <RadzenFormField Text="Aviso 2 (~15 días después)" Class="w-100">
+                                                    <RadzenDatePicker @bind-Value="publicacionActual.FechaPublicacionAviso2" DateFormat="dd/MM/yyyy" Class="w-100" />
+                                                </RadzenFormField>
+                                                @if (publicacionActual.FechaPublicacionAviso1.HasValue && !publicacionActual.FechaPublicacionAviso2.HasValue)
+                                                {
+                                                    <RadzenButton Text="Registrar Hoy Aviso 2" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" 
+                                                                  Click="@(() => RegistrarAvisoHoy(2))" Class="mt-1 w-100" />
+                                                }
+                                            </RadzenColumn>
+
+                                            <RadzenColumn Size="12" SizeMD="4">
+                                                <RadzenFormField Text="Aviso 3 (~15 días después)" Class="w-100">
+                                                    <RadzenDatePicker @bind-Value="publicacionActual.FechaPublicacionAviso3" DateFormat="dd/MM/yyyy" 
+                                                                      Change="@CalcularFinOposicion" Class="w-100" />
+                                                </RadzenFormField>
+                                                @if (publicacionActual.FechaPublicacionAviso2.HasValue && !publicacionActual.FechaPublicacionAviso3.HasValue)
+                                                {
+                                                    <RadzenButton Text="Registrar Hoy Aviso 3" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" 
+                                                                  Click="@(() => RegistrarAvisoHoy(3))" Class="mt-1 w-100" />
+                                                }
+                                            </RadzenColumn>
+                                        </RadzenRow>
+                                    </RadzenCard>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="Término Fatal de Oposiciones de Terceros (30 días hábiles)" Class="w-100">
+                                        <RadzenDatePicker @bind-Value="publicacionActual.FechaFinPeriodoOposicion" DateFormat="dd/MM/yyyy" Class="w-100" />
+                                    </RadzenFormField>
+                                    <small class="text-muted d-block mt-1">Calculado a partir de la fecha de publicación del tercer aviso.</small>
+                                </RadzenColumn>
+
+                                <!-- ADQUISICIÓN Y ENTREGA FÍSICA A DIGEPIH -->
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <div class="p-3 border rounded bg-white h-100">
+                                        <RadzenText TextStyle="TextStyle.Caption" Class="fw-bold d-block mb-2 text-uppercase text-danger">
+                                            Control de Entrega Física de Ejemplares (Evitar Abandono)
+                                        </RadzenText>
+                                        <div class="d-flex flex-column gap-2">
+                                            <div>
+                                                <RadzenCheckBox @bind-Value="publicacionActual.EjemplaresFisicosRecibidos" Name="chkRecib" />
+                                                <RadzenLabel Text="Los 3 ejemplares físicos de La Gaceta comprados y recibidos de ENAG" Component="chkRecib" Class="ms-2" />
+                                            </div>
+                                            <div>
+                                                <RadzenCheckBox @bind-Value="publicacionActual.EjemplaresEntregadosDIGEPIH" Name="chkEntreg" />
+                                                <RadzenLabel Text="Los 3 ejemplares físicos ENTREGADOS formalmente ante DIGEPIH" Component="chkEntreg" Class="ms-2 fw-bold text-success" />
+                                            </div>
+                                            @if (publicacionActual.EjemplaresEntregadosDIGEPIH)
+                                            {
+                                                <div class="mt-1">
+                                                    <RadzenFormField Text="Fecha de Entrega Física ante DIGEPIH" Class="w-100">
+                                                        <RadzenDatePicker @bind-Value="publicacionActual.FechaEntregaEjemplaresDIGEPIH" DateFormat="dd/MM/yyyy" Class="w-100" />
+                                                    </RadzenFormField>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <RadzenButton Icon="inventory_2" Text="Registrar Entrega de los 3 Ejemplares en DIGEPIH" 
+                                                              ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" Class="w-100 mt-2" 
+                                                              Click="@ConfirmarEntregaEjemplaresFisicos" />
+                                            }
+                                        </div>
+                                    </div>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" Class="text-end mt-2">
+                                    <RadzenButton ButtonType="ButtonType.Submit" Icon="save" Text="Guardar Ciclo de Publicación" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Medium" />
+                                </RadzenColumn>
+                            </RadzenRow>
+                        </RadzenTemplateForm>
+                    </div>
+                </RadzenTabsItem>
+
+                <!-- PESTAÑA 4: TÍTULO OFICIAL Y SOLVENCIA P360 (GATEKEEPER) -->
+                <RadzenTabsItem Text="Título y Solvencia P360" Icon="workspace_premium">
+                    <div class="p-3">
+                        <!-- BANNER CRÍTICO DE LA COMPUERTA DE SOLVENCIA P360 -->
+                        @if (certificadoActual.SolvenciaValidada)
+                        {
+                            <RadzenAlert AlertStyle="AlertStyle.Success" Variant="Variant.Flat" Class="mb-3" AllowClose="false">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <RadzenIcon Icon="verified" Class="fs-3 text-success" />
+                                        <div>
+                                            <strong>SOLVENCIA P360 CERTIFICADA - DESPACHO AUTORIZADO</strong><br />
+                                            Validada el @(certificadoActual.FechaValidacionSolvencia?.ToString("dd/MM/yyyy HH:mm") ?? "N/A") por <u>@(certificadoActual.ValidadoPorUsuario ?? "Administración")</u>. 
+                                            El cliente está solvente y se autoriza la entrega física y digital del título.
+                                        </div>
+                                    </div>
+                                    <RadzenButton Icon="lock_open" Text="Revocar Solvencia" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" 
+                                                  Click="@(() => AlternarSolvencia(false))" />
+                                </div>
+                            </RadzenAlert>
+                        }
+                        else
+                        {
+                            <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Class="mb-3" AllowClose="false">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <RadzenIcon Icon="block" Class="fs-3 text-danger" />
+                                        <div>
+                                            <strong>COMPUERTA P360 ACTIVA: TÍTULO BLOQUEADO POR REGLA DE SOLVENCIA</strong><br />
+                                            Por regla de gestión del despacho (Párrafo 360 del Manual), está <b>estrictamente prohibido</b> entregar el certificado original 
+                                            o remitir copias oficiales hasta que el departamento contable certifique el pago total de honorarios y gastos.
+                                        </div>
+                                    </div>
+                                    <RadzenButton Icon="verified_user" Text="Aprobar Solvencia P360" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                                  Click="@(() => AlternarSolvencia(true))" />
+                                </div>
+                            </RadzenAlert>
+                        }
+
+                        <RadzenTemplateForm TItem="CertificadoRegistro" Data="@certificadoActual" Submit="@GuardarCertificado">
+                            <RadzenRow Gap="1rem">
+                                <RadzenColumn Size="12" SizeMD="4">
+                                    <RadzenFormField Text="No. de Registro Oficial (Título DIGEPIH)" Class="w-100">
+                                        <RadzenTextBox @bind-Value="certificadoActual.NumeroRegistroOficial" Placeholder="Ej: 2026-REG-0112" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="4">
+                                    <RadzenFormField Text="Fecha de Concesión Oficial" Class="w-100">
+                                        <RadzenDatePicker @bind-Value="certificadoActual.FechaConcesion" DateFormat="dd/MM/yyyy" 
+                                                          Change="@CalcularVigenciaDecenal" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="4">
+                                    <RadzenFormField Text="Vencimiento Decenal (10 Años de Vigencia)" Class="w-100">
+                                        <RadzenDatePicker @bind-Value="certificadoActual.FechaVencimientoDecenal" DateFormat="dd/MM/yyyy" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="Ubicación Física del Certificado (Tabla UbicacionesArchivo en BD)" Class="w-100">
+                                        <RadzenDropDown @bind-Value="certificadoActual.UbicacionArchivoId" Data="@ubicacionesArchivo" 
+                                                        TextProperty="Nombre" ValueProperty="Id" Class="w-100" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                <!-- DESPACHO AL CLIENTE (BLOQUEADO SI NO HAY SOLVENCIA P360) -->
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <div class="p-3 border rounded bg-light">
+                                        <RadzenText TextStyle="TextStyle.Caption" Class="fw-bold d-block mb-1 text-uppercase">
+                                            Despacho y Entrega Final al Cliente
+                                        </RadzenText>
+                                        <div class="d-flex flex-column gap-2">
+                                            <RadzenFormField Text="Fecha de Entrega al Cliente" Class="w-100">
+                                                <RadzenDatePicker @bind-Value="certificadoActual.FechaEntregaCliente" DateFormat="dd/MM/yyyy" 
+                                                                  Disabled="@(!certificadoActual.SolvenciaValidada)" Class="w-100" />
+                                            </RadzenFormField>
+                                            <RadzenFormField Text="Persona que Recibe / Acuse de Recibo" Class="w-100">
+                                                <RadzenTextBox @bind-Value="certificadoActual.FirmaRecepcionClienteUri" 
+                                                               Placeholder="Nombre del apoderado o mensajero que firmó acuse" 
+                                                               Disabled="@(!certificadoActual.SolvenciaValidada)" Class="w-100" />
+                                            </RadzenFormField>
+                                        </div>
+                                    </div>
+                                </RadzenColumn>
+
+                                <RadzenColumn Size="12" Class="text-end mt-2">
+                                    <RadzenButton ButtonType="ButtonType.Submit" Icon="save" Text="Guardar Datos del Título" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Medium" />
+                                </RadzenColumn>
+                            </RadzenRow>
+                        </RadzenTemplateForm>
+                    </div>
+                </RadzenTabsItem>
+
+                <!-- PESTAÑA 6: LITIGIOS Y OPOSICIONES (DIGEPIH) -->
+                <RadzenTabsItem Text="Litigios y Oposiciones" Icon="gavel">
+                    <div class="p-3">
+                        <div class="d-flex align-items-center justify-content-between mb-3">
+                            <div>
+                                <strong class="fs-6 text-dark d-block">Controversias y Oposiciones del Expediente</strong>
+                                <span class="text-muted small">Oposiciones de terceros, contestaciones, objeciones de fondo y recursos</span>
+                            </div>
+                            <RadzenButton Icon="add" Text="Nueva Controversia" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                          Click="@(() => NavigationManager.NavigateTo("/litigios"))" />
+                        </div>
+
+                        @if (!litigiosExpediente.Any())
+                        {
+                            <div class="p-4 text-center border rounded bg-light">
+                                <RadzenIcon Icon="task_alt" Class="text-success fs-2 mb-2" />
+                                <h6 class="fw-bold text-dark mb-1">Sin litigios ni oposiciones activas</h6>
+                                <p class="text-muted small mb-0">La solicitud avanza en el trámite ordinario sin demandas de terceros ni denegatorias controvertidas.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr class="small text-muted">
+                                            <th>Tipo de Acción</th>
+                                            <th>Marca en Conflicto</th>
+                                            <th>Partes Procesales</th>
+                                            <th>Vencimiento Fatal</th>
+                                            <th>Autorización Cliente</th>
+                                            <th>Estado</th>
+                                            <th class="text-end">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var lit in litigiosExpediente)
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <span class="badge bg-secondary text-white small">@lit.TipoLitigio</span>
+                                                </td>
+                                                <td>
+                                                    <strong class="text-dark">@lit.MarcaEnConflicto</strong>
+                                                </td>
+                                                <td class="small">
+                                                    <div><b>Dem:</b> @lit.ParteDemandante</div>
+                                                    <div><b>Dda:</b> @lit.ParteDemandada</div>
+                                                </td>
+                                                <td>
+                                                    <strong class="text-danger small">@lit.FechaVencimientoFatal.ToString("dd/MM/yyyy")</strong>
+                                                </td>
+                                                <td>
+                                                    @if (lit.AutorizadoPorCliente)
+                                                    {
+                                                        <span class="badge bg-success">Autorizado</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-danger">Sin Autorizar</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-info text-white">@lit.Estado</span>
+                                                </td>
+                                                <td class="text-end">
+                                                    <RadzenButton Icon="open_in_new" Text="Gestionar" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
+                                                                  Click="@(() => NavigationManager.NavigateTo("/litigios"))" />
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </RadzenTabsItem>
+            </Tabs>
+        </RadzenTabs>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private Expediente? expediente;
+    private bool cargando = true;
+
+    // Catálogos desde Base de Datos (Zero Hardcoded Lists)
+    private List<Cliente> clientes = new();
+    private List<TipoSigno> tiposSigno = new();
+    private List<EstadoProcesal> estadosProcesales = new();
+    private List<TipoActuacion> tiposActuaciones = new();
+    private List<ViaPresentacion> viasPresentacion = new();
+    private List<UbicacionArchivo> ubicacionesArchivo = new();
+    private List<ClaseNizaItem> catalogoNiza = ClaseNizaItem.ObtenerCatalogoCompleto();
+    private List<Litigio> litigiosExpediente = new();
+
+    // Formularios y modelos locales
+    private int tabPrincipalIndex = 0;
+    private ActuacionExpediente nuevaActuacion = new();
+    private int? nuevoEstadoParaActuacion;
+    private PublicacionENAG publicacionActual = new();
+    private CertificadoRegistro certificadoActual = new();
+
+    // Motor de Plazos Legales y Semáforo (Art. 42 LPA)
+    private List<PlazoLegal> plazosExpediente = new();
+    private (PlazoLegal? Plazo, SemaforoPlazo? Semaforo) plazoMasUrgente;
+    private Dictionary<Guid, SemaforoPlazo> semaforosPlazos = new();
+
+    // Formulario de nuevo plazo procesal
+    private bool mostrandoFormNuevoPlazo = false;
+    private string presetPlazoSeleccionado = "prevencion-forma";
+    private string conceptoPlazoNuevo = "Auto de Prevención de Forma (Subsanar Requisitos)";
+    private int diasHabilesNuevo = 30;
+    private DateTime fechaNotificacionNuevo = DateTime.Today;
+    private DateTime fechaFatalProyectada = DateTime.Today;
+    private string? observacionesPlazoNuevo;
+
+    // Modal de evacuación de plazo
+    private PlazoLegal? plazoAEvacuar;
+    private DateTime fechaCumplimientoModal = DateTime.Today;
+    private string notaCumplimientoModal = string.Empty;
+
+    private record PresetPlazo(string Codigo, string Nombre, int DiasHabiles, string ConceptoDefault);
+    private readonly List<PresetPlazo> presetsDisponibles = new()
+    {
+        new("prevencion-forma", "Auto de Prevención de Forma (30 días hábiles - Art. 88 LPI)", 30, "Auto de Prevención de Forma (Subsanar Requisitos)"),
+        new("objecion-fondo", "Auto de Objeción de Fondo / Denegatoria Previa (60 días hábiles - Art. 88 LPI)", 60, "Auto de Objeción de Fondo (Contestación de Fondo)"),
+        new("periodo-oposicion", "Período de Oposición tras 3er Aviso (30 días hábiles)", 30, "Término Fatal de Oposición de Terceros (30 días)"),
+        new("contestacion-oposicion", "Contestación a Oposición de Tercero (10 días hábiles)", 10, "Contestación a Oposición Notificada"),
+        new("personalizado", "Plazo Personalizado / Requerimiento Especial", 15, "Requerimiento Administrativo Especial")
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CargarExpediente();
+    }
+
+    private async Task CargarExpediente()
+    {
+        cargando = true;
+        clientes = await ClienteService.GetClientesAsync();
+        tiposSigno = await CatalogoService.GetTiposSignoAsync(soloActivos: true);
+        estadosProcesales = await CatalogoService.GetEstadosProcesalesAsync(soloActivos: true);
+        tiposActuaciones = await CatalogoService.GetTiposActuacionesAsync(soloActivos: true);
+        viasPresentacion = await CatalogoService.GetViasPresentacionAsync(soloActivos: true);
+        ubicacionesArchivo = await CatalogoService.GetUbicacionesArchivoAsync(soloActivos: true);
+
+        expediente = await ExpedienteService.GetExpedienteDetalleAsync(Id);
+
+        if (expediente != null)
+        {
+            // Inicializar publicación
+            publicacionActual = expediente.Publicaciones.FirstOrDefault() ?? new PublicacionENAG
+            {
+                ExpedienteId = expediente.Id
+            };
+
+            // Inicializar certificado
+            certificadoActual = expediente.Certificado ?? new CertificadoRegistro
+            {
+                ExpedienteId = expediente.Id,
+                FechaConcesion = DateTime.UtcNow,
+                FechaVencimientoDecenal = DateTime.UtcNow.AddYears(10),
+                UbicacionArchivoId = ubicacionesArchivo.FirstOrDefault(u => u.Nombre.Contains("Bóveda"))?.Id ?? ubicacionesArchivo.FirstOrDefault()?.Id
+            };
+
+            // Inicializar plazos legales del expediente y evaluar semáforo procesal
+            plazosExpediente = await PlazosService.ObtenerPlazosExpedienteAsync(Id);
+            plazoMasUrgente = await PlazosService.ObtenerPlazoMasUrgenteAsync(Id);
+            semaforosPlazos.Clear();
+            foreach (var p in plazosExpediente)
+            {
+                int dias = await PlazosService.CalcularDiasHabilesRestantesAsync(p.FechaVencimientoFatal);
+                semaforosPlazos[p.Id] = PlazosService.EvaluarSemaforo(dias, p.Cumplido);
+            }
+            await ActualizarProyeccionVencimiento();
+
+            // Cargar controversias y litigios del expediente
+            litigiosExpediente = await LitigioService.GetLitigiosPorExpedienteAsync(Id);
+
+            // Inicializar nueva actuación
+            ResetNuevaActuacion();
+        }
+
+        cargando = false;
+    }
+
+    private void ResetNuevaActuacion()
+    {
+        nuevaActuacion = new ActuacionExpediente
+        {
+            ExpedienteId = Id,
+            TipoActuacionId = tiposActuaciones.FirstOrDefault()?.Id ?? 1,
+            FechaActuacion = DateTime.UtcNow,
+            UsuarioResponsable = expediente?.AbogadoResponsable ?? "Abogado Asignado"
+        };
+        nuevoEstadoParaActuacion = null;
+    }
+
+    private async Task GuardarFichaGeneral()
+    {
+        if (expediente == null) return;
+        await ExpedienteService.ActualizarExpedienteAsync(expediente);
+        NotificationService.Notify(NotificationSeverity.Success, "Guardado", "Ficha del expediente actualizada correctamente.");
+        await CargarExpediente();
+    }
+
+    private async Task RegistrarNuevoHito()
+    {
+        if (expediente == null) return;
+        if (string.IsNullOrWhiteSpace(nuevaActuacion.Titulo))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el título de la actuación.");
+            return;
+        }
+
+        await ExpedienteService.RegistrarActuacionAsync(nuevaActuacion, nuevoEstadoParaActuacion);
+        NotificationService.Notify(NotificationSeverity.Success, "Línea de Tiempo", "Hito procesal agregado correctamente.");
+        await CargarExpediente();
+    }
+
+    private async Task CambiarEstadoProcesalRapido(int nuevoEstadoId)
+    {
+        if (expediente == null || expediente.EstadoProcesalId == nuevoEstadoId) return;
+
+        await ExpedienteService.ActualizarEstadoProcesalAsync(expediente.Id, nuevoEstadoId, "Cambio de estado procesal manual desde ficha general.", "Usuario Actual");
+        NotificationService.Notify(NotificationSeverity.Info, "Estado Actualizado", "El estado procesal ha sido actualizado.");
+        await CargarExpediente();
+    }
+
+    // -------------------------------------------------------------
+    // GESTIÓN DE PLAZOS LEGALES Y VENCIMIENTOS (ART. 42 LPA)
+    // -------------------------------------------------------------
+    private async Task CambiarPresetPlazo(string codigo)
+    {
+        presetPlazoSeleccionado = codigo;
+        var preset = presetsDisponibles.FirstOrDefault(p => p.Codigo == codigo);
+        if (preset != null)
+        {
+            conceptoPlazoNuevo = preset.ConceptoDefault;
+            diasHabilesNuevo = preset.DiasHabiles;
+        }
+        await ActualizarProyeccionVencimiento();
+    }
+
+    private async Task ActualizarProyeccionVencimiento()
+    {
+        fechaFatalProyectada = await PlazosService.CalcularVencimientoFatalAsync(fechaNotificacionNuevo, diasHabilesNuevo);
+    }
+
+    private async Task RegistrarNuevoPlazoProcesal()
+    {
+        if (expediente == null) return;
+        if (string.IsNullOrWhiteSpace(conceptoPlazoNuevo))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el concepto del término legal.");
+            return;
+        }
+
+        await PlazosService.RegistrarPlazoAsync(expediente.Id, conceptoPlazoNuevo, diasHabilesNuevo, fechaNotificacionNuevo, observacionesPlazoNuevo, expediente.AbogadoResponsable);
+        NotificationService.Notify(NotificationSeverity.Success, "Término Registrado", $"Plazo fatal asentado. Vence el {fechaFatalProyectada:dd/MM/yyyy}");
+        mostrandoFormNuevoPlazo = false;
+        await CargarExpediente();
+    }
+
+    private void AbrirModalEvacuarPlazo(PlazoLegal p)
+    {
+        plazoAEvacuar = p;
+        fechaCumplimientoModal = DateTime.Today;
+        notaCumplimientoModal = string.Empty;
+    }
+
+    private async Task ConfirmarEvacuacionPlazo()
+    {
+        if (plazoAEvacuar == null) return;
+
+        await PlazosService.MarcarPlazoCumplidoAsync(plazoAEvacuar.Id, fechaCumplimientoModal, notaCumplimientoModal, expediente?.AbogadoResponsable);
+        NotificationService.Notify(NotificationSeverity.Success, "Término Evacuado", "El plazo ha sido cumplido y registrado en la bitácora procesal.");
+        plazoAEvacuar = null;
+        await CargarExpediente();
+    }
+
+    private async Task EliminarPlazoProcesal(Guid id)
+    {
+        await PlazosService.EliminarPlazoAsync(id);
+        NotificationService.Notify(NotificationSeverity.Info, "Eliminado", "Plazo legal eliminado del expediente.");
+        await CargarExpediente();
+    }
+
+    private async Task CalcularFinOposicion(DateTime? args = null)
+    {
+        if (publicacionActual.FechaPublicacionAviso3.HasValue)
+        {
+            // En Honduras son 30 días hábiles posteriores al 3er aviso excluyendo fines de semana y feriados (Art. 42 LPA)
+            publicacionActual.FechaFinPeriodoOposicion = await PlazosService.CalcularVencimientoFatalAsync(
+                publicacionActual.FechaPublicacionAviso3.Value, 30);
+        }
+    }
+
+    private async Task GuardarPublicacion()
+    {
+        if (expediente == null) return;
+        await ExpedienteService.GuardarPublicacionENAGAsync(publicacionActual, "Paralegal Encargado");
+        NotificationService.Notify(NotificationSeverity.Success, "Publicaciones ENAG", "Datos de publicación en La Gaceta guardados correctamente.");
+        await CargarExpediente();
+    }
+
+    private void CalcularVigenciaDecenal()
+    {
+        if (certificadoActual.FechaConcesion != default)
+        {
+            certificadoActual.FechaVencimientoDecenal = certificadoActual.FechaConcesion.AddYears(10);
+        }
+    }
+
+    private async Task AlternarSolvencia(bool esSolvente)
+    {
+        if (expediente == null) return;
+        await ExpedienteService.ValidarSolvenciaAsync(expediente.Id, esSolvente, "Departamento de Cobranza / Finanzas");
+        NotificationService.Notify(esSolvente ? NotificationSeverity.Success : NotificationSeverity.Warning, 
+            "Compuerta P360", 
+            esSolvente ? "Solvencia P360 validada. Despacho autorizado." : "Solvencia revocada. Título bloqueado.");
+        await CargarExpediente();
+    }
+
+    private async Task GuardarCertificado()
+    {
+        if (expediente == null) return;
+        if (string.IsNullOrWhiteSpace(certificadoActual.NumeroRegistroOficial))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el número de registro oficial.");
+            return;
+        }
+
+        await ExpedienteService.GuardarCertificadoAsync(certificadoActual, "Abogado de Marcas");
+        NotificationService.Notify(NotificationSeverity.Success, "Título de Marca", "Certificado de registro guardado correctamente.");
+        await CargarExpediente();
+    }
+
+    private string ObtenerDetalleClase(int numero)
+    {
+        var clase = catalogoNiza.FirstOrDefault(c => c.Numero == numero);
+        return clase != null ? clase.Nombre : $"Clase {numero}";
+    }
+
+    private BadgeStyle GetBadgeStyleFromColor(string? color)
+    {
+        return color?.ToLowerInvariant() switch
+        {
+            "success" => BadgeStyle.Success,
+            "warning" => BadgeStyle.Warning,
+            "danger" => BadgeStyle.Danger,
+            "info" => BadgeStyle.Info,
+            "secondary" => BadgeStyle.Secondary,
+            _ => BadgeStyle.Primary
+        };
+    }
+
+    private string GetFaseClass(string fase)
+    {
+        if (expediente?.EstadoProcesal == null) return "text-muted";
+        return expediente.EstadoProcesal.Fase?.Equals(fase, StringComparison.OrdinalIgnoreCase) == true
+            ? "bg-primary text-white shadow-sm"
+            : "text-muted bg-white";
+    }
+
+    private async Task RegistrarPresentacionOficialFormal()
+    {
+        if (expediente == null) return;
+        if (string.IsNullOrWhiteSpace(expediente.NumeroExpedienteDIGEPIH))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el número oficial asignado por DIGEPIH.");
+            return;
+        }
+        if (!expediente.FechaPresentacionOficial.HasValue)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe seleccionar la fecha de presentación oficial (que fija la prioridad).");
+            return;
+        }
+
+        await ExpedienteService.RegistrarPresentacionOficialAsync(
+            expediente.Id,
+            expediente.NumeroExpedienteDIGEPIH,
+            expediente.FechaPresentacionOficial.Value,
+            expediente.ViaPresentacionId ?? 1,
+            expediente.AbogadoResponsable ?? "Abogado Asignado");
+
+        NotificationService.Notify(NotificationSeverity.Success, "Presentación Oficial", "Solicitud formalmente presentada ante DIGEPIH. Se fijó la prioridad legal nacional y el expediente avanzó al estado 'Presentado ante DIGEPIH'.");
+        await CargarExpediente();
+    }
+
+    private async Task RegistrarAvisoHoy(int numeroAviso)
+    {
+        if (publicacionActual == null || expediente == null) return;
+        var hoy = DateTime.UtcNow;
+
+        if (numeroAviso == 1)
+        {
+            publicacionActual.FechaPublicacionAviso1 = hoy;
+            await ExpedienteService.RegistrarActuacionAsync(new ActuacionExpediente
+            {
+                ExpedienteId = expediente.Id,
+                TipoActuacionId = 9, // Aviso Publicado
+                Titulo = "Publicación del 1er Aviso en La Gaceta (ENAG)",
+                Comentario = $"Primer aviso oficial publicado el {hoy:dd/MM/yyyy}. Comienza el intervalo de 15 días.",
+                FechaActuacion = hoy,
+                UsuarioResponsable = expediente.ParalegalAsignado ?? "Paralegal Encargado"
+            }, 14); // En Publicación La Gaceta
+        }
+        else if (numeroAviso == 2)
+        {
+            publicacionActual.FechaPublicacionAviso2 = hoy;
+            await ExpedienteService.RegistrarActuacionAsync(new ActuacionExpediente
+            {
+                ExpedienteId = expediente.Id,
+                TipoActuacionId = 9,
+                Titulo = "Publicación del 2do Aviso en La Gaceta (ENAG)",
+                Comentario = $"Segundo aviso publicado el {hoy:dd/MM/yyyy}.",
+                FechaActuacion = hoy,
+                UsuarioResponsable = expediente.ParalegalAsignado ?? "Paralegal Encargado"
+            });
+        }
+        else if (numeroAviso == 3)
+        {
+            publicacionActual.FechaPublicacionAviso3 = hoy;
+            publicacionActual.FechaFinPeriodoOposicion = hoy.AddDays(42); // ~30 días hábiles
+            await ExpedienteService.RegistrarActuacionAsync(new ActuacionExpediente
+            {
+                ExpedienteId = expediente.Id,
+                TipoActuacionId = 9,
+                Titulo = "Publicación del 3er Aviso en La Gaceta (ENAG) - Plazo de Oposición",
+                Comentario = $"Tercer aviso publicado el {hoy:dd/MM/yyyy}. Corre el plazo de 30 días hábiles para oposiciones de terceros.",
+                FechaActuacion = hoy,
+                UsuarioResponsable = expediente.ParalegalAsignado ?? "Paralegal Encargado"
+            }, 16); // En Período de Oposición (30 días)
+        }
+
+        await ExpedienteService.GuardarPublicacionENAGAsync(publicacionActual, expediente.ParalegalAsignado ?? "Paralegal Encargado");
+        NotificationService.Notify(NotificationSeverity.Success, "Publicación", $"Se registró el Aviso {numeroAviso} en La Gaceta.");
+        await CargarExpediente();
+    }
+
+    private async Task ConfirmarEntregaEjemplaresFisicos()
+    {
+        if (publicacionActual == null || expediente == null) return;
+        publicacionActual.EjemplaresFisicosRecibidos = true;
+        publicacionActual.EjemplaresEntregadosDIGEPIH = true;
+        publicacionActual.FechaEntregaEjemplaresDIGEPIH = DateTime.UtcNow;
+
+        await ExpedienteService.GuardarPublicacionENAGAsync(publicacionActual, expediente.AbogadoResponsable ?? "Abogado Asignado");
+        NotificationService.Notify(NotificationSeverity.Success, "Ejemplares Físicos Entregados", "Se entregaron formalmente los 3 ejemplares físicos ante DIGEPIH. Se neutralizó el riesgo de abandono legal.");
+        await CargarExpediente();
+    }
+}

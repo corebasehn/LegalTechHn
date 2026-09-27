@@ -1,0 +1,798 @@
+@page "/"
+@rendermode InteractiveServer
+@using LegalTech.Web.Domain.Entities
+@using LegalTech.Web.Domain.Enums
+@using LegalTech.Web.Services
+@inject ExpedienteService ExpedienteService
+@inject ClienteService ClienteService
+@inject PlazosService PlazosService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Torre de Control de Propiedad Intelectual - LegalTech Honduras</PageTitle>
+
+<div class="w-100 p-2 p-md-3">
+    <!-- 1. HERO HEADER: TORRE DE CONTROL DE PROPIEDAD INTELECTUAL -->
+    <div class="p-4 mb-4 rounded-3 text-white shadow-sm position-relative overflow-hidden" 
+         style="background: linear-gradient(135deg, #0e2a47 0%, #173b61 50%, #1e4d7b 100%);">
+        <div class="position-absolute end-0 top-0 bottom-0 d-none d-lg-flex align-items-center pe-4 opacity-25" style="pointer-events: none;">
+            <RadzenIcon Icon="gavel" Style="font-size: 11rem; color: #ffffff;" />
+        </div>
+
+        <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3 position-relative" style="z-index: 1;">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="badge bg-warning text-dark px-2 py-1 fw-bold fs-7">
+                        <RadzenIcon Icon="security" Class="me-1" Style="vertical-align: middle; font-size: 1rem;" /> DIGEPIH / IP • HONDURAS
+                    </span>
+                    <span class="badge bg-white bg-opacity-25 text-white px-2 py-1">
+                        <RadzenIcon Icon="calendar_today" Class="me-1" Style="vertical-align: middle; font-size: 0.9rem;" />
+                        @DateTime.Today.ToString("dddd, dd 'de' MMMM 'de' yyyy", new System.Globalization.CultureInfo("es-HN"))
+                    </span>
+                </div>
+                <h1 class="h3 fw-bold mb-1 text-white">Torre de Control de Propiedad Intelectual</h1>
+                <p class="mb-0 text-white-50" style="max-width: 680px; font-size: 0.95rem;">
+                    Monitoreo en tiempo real de solicitudes de marcas, términos perentorios fatales en días hábiles (Art. 42 LPA) y ciclo de publicaciones en La Gaceta (ENAG).
+                </p>
+            </div>
+
+            <!-- Accesos Rápidos en el Header -->
+            <div class="d-flex flex-wrap gap-2">
+                <RadzenButton Icon="add_circle" Text="Nueva Solicitud" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Medium" 
+                              Click="@(() => NavigationManager.NavigateTo("/expedientes?nuevo=true"))" Class="shadow-sm fw-bold" />
+                <RadzenButton Icon="folder_special" Text="Expedientes" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Medium" 
+                              Click="@(() => NavigationManager.NavigateTo("/expedientes"))" Class="shadow-sm" />
+                <RadzenButton Icon="gavel" Text="Litigios" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Medium" 
+                              Click="@(() => NavigationManager.NavigateTo("/litigios"))" Class="shadow-sm" />
+                <RadzenButton Icon="people" Text="Clientes" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Medium" 
+                              Click="@(() => NavigationManager.NavigateTo("/clientes"))" Class="shadow-sm" />
+                <RadzenButton Icon="tune" Text="Configuración" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Medium" 
+                              Click="@(() => NavigationManager.NavigateTo("/configuraciones"))" Class="shadow-sm" />
+            </div>
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="p-5 text-center bg-white rounded shadow-sm">
+            <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" Class="mb-3" />
+            <span class="text-muted fs-6">Sincronizando expedientes, cómputos de plazos fatales y publicaciones oficiales...</span>
+        </div>
+    }
+    else
+    {
+        <!-- 2. FRANJA EJECUTIVA DE INDICADORES CLAVE (KPIs INTERACTIVOS) -->
+        <RadzenRow Gap="1rem" Class="mb-4">
+            <!-- Total Expedientes -->
+            <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 cursor-pointer card-hover" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/expedientes"))" 
+                     title="Ver todos los expedientes">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-muted small fw-semibold">Total Expedientes</span>
+                        <div class="p-2 rounded bg-primary bg-opacity-10 text-primary">
+                            <RadzenIcon Icon="folder" Style="font-size: 1.4rem;" />
+                        </div>
+                    </div>
+                    <div class="fs-3 fw-bold text-dark mb-0">@totalExpedientes</div>
+                    <span class="text-muted small">Cartera activa</span>
+                </div>
+            </RadzenColumn>
+
+            <!-- 🔴 Críticos (<= 5 días) -->
+            <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 cursor-pointer card-hover @(totalCriticos > 0 ? "border-start-danger" : "")" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/expedientes?filtro=criticos"))" 
+                     title="Ver términos críticos (≤ 5 días hábiles)">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-danger small fw-semibold">🔴 Críticos (≤ 5 d)</span>
+                        <div class="p-2 rounded bg-danger bg-opacity-10 text-danger">
+                            <RadzenIcon Icon="report_problem" Style="font-size: 1.4rem;" />
+                        </div>
+                    </div>
+                    <div class="fs-3 fw-bold text-danger mb-0">@totalCriticos</div>
+                    <span class="text-muted small">Riesgo inminente</span>
+                </div>
+            </RadzenColumn>
+
+            <!-- 🟡 Alertas (6 a 15 días) -->
+            <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 cursor-pointer card-hover" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/expedientes?filtro=alertas"))" 
+                     title="Ver términos en alerta (6 a 15 días hábiles)">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-warning small fw-semibold">🟡 Alerta (6-15 d)</span>
+                        <div class="p-2 rounded bg-warning bg-opacity-10 text-warning">
+                            <RadzenIcon Icon="schedule" Style="font-size: 1.4rem;" />
+                        </div>
+                    </div>
+                    <div class="fs-3 fw-bold text-warning mb-0">@totalAlertas</div>
+                    <span class="text-muted small">Preparar contestación</span>
+                </div>
+            </RadzenColumn>
+
+            <!-- 🟢 En Plazo (> 15 días) -->
+            <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 cursor-pointer card-hover" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/expedientes?filtro=enplazo"))" 
+                     title="Ver expedientes con plazos en orden">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-success small fw-semibold">🟢 En Plazo (&gt; 15 d)</span>
+                        <div class="p-2 rounded bg-success bg-opacity-10 text-success">
+                            <RadzenIcon Icon="check_circle" Style="font-size: 1.4rem;" />
+                        </div>
+                    </div>
+                    <div class="fs-3 fw-bold text-success mb-0">@totalEnPlazo</div>
+                    <span class="text-muted small">Términos holgados</span>
+                </div>
+            </RadzenColumn>
+
+            <!-- 🛡️ Concesiones & Títulos -->
+            <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 cursor-pointer card-hover" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/expedientes"))" 
+                     title="Ver marcas concedidas y registradas">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-primary small fw-semibold">🛡️ Concesiones</span>
+                        <div class="p-2 rounded bg-info bg-opacity-10 text-info">
+                            <RadzenIcon Icon="verified" Style="font-size: 1.4rem;" />
+                        </div>
+                    </div>
+                    <div class="fs-3 fw-bold text-primary mb-0">@totalConcedidas</div>
+                    <span class="text-muted small">En bóveda / decenal</span>
+                </div>
+            </RadzenColumn>
+
+            <!-- 🏢 Clientes / Titulares -->
+            <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 cursor-pointer card-hover" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/clientes"))" 
+                     title="Ver padrón de clientes">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-secondary small fw-semibold">🏢 Titulares</span>
+                        <div class="p-2 rounded bg-secondary bg-opacity-10 text-secondary">
+                            <RadzenIcon Icon="business" Style="font-size: 1.4rem;" />
+                        </div>
+                    </div>
+                    <div class="fs-3 fw-bold text-dark mb-0">@totalClientes</div>
+                    <span class="text-muted small">Clientes en base de datos</span>
+                </div>
+            </RadzenColumn>
+        </RadzenRow>
+
+        <!-- 3. CUADRO PRINCIPAL (2 COLUMNAS COMPLEMENTARIAS) -->
+        <RadzenRow Gap="1.5rem" Class="mb-4">
+            <!-- COLUMNA IZQUIERDA: PLAZOS URGENTES Y PUBLICACIONES ENAG (7 columnas) -->
+            <RadzenColumn Size="12" SizeLG="7">
+                <!-- WIDGET A: SEMÁFORO DE PLAZOS PERENTORIOS MÁS URGENTES (ART. 42 LPA) -->
+                <div class="card bg-white shadow-sm border-0 mb-4 rounded-3 overflow-hidden">
+                    <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="p-2 rounded bg-danger bg-opacity-10 text-danger">
+                                <RadzenIcon Icon="alarm" Style="font-size: 1.3rem;" />
+                            </div>
+                            <div>
+                                <strong class="fs-6 text-dark d-block">Términos Procesales Perentorios (Art. 42 LPA)</strong>
+                                <span class="text-muted small">Plazos fatales en días hábiles con exclusión de feriados hondureños</span>
+                            </div>
+                        </div>
+                        <RadzenButton Icon="open_in_new" Text="Ver Todos" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                                      Click="@(() => NavigationManager.NavigateTo("/expedientes"))" />
+                    </div>
+
+                    <div class="card-body p-0">
+                        @if (!plazosUrgentes.Any())
+                        {
+                            <div class="p-4 text-center">
+                                <RadzenIcon Icon="task_alt" Class="text-success fs-1 mb-2" />
+                                <h6 class="fw-bold text-dark">Todos los términos al día</h6>
+                                <p class="text-muted small mb-0">No se registran objeciones, prevenciones ni oposiciones pendientes de evacuación.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr class="small text-muted">
+                                            <th class="ps-3">Estado / Días Hábiles</th>
+                                            <th>Expediente / Signo</th>
+                                            <th>Acto Procesal a Evacuar</th>
+                                            <th>Fecha Fatal</th>
+                                            <th class="text-end pe-3">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var p in plazosUrgentes.Take(5))
+                                        {
+                                            <tr>
+                                                <td class="ps-3">
+                                                    @if (p.Semaforo.NivelRiesgo == "Vencido")
+                                                    {
+                                                        <span class="badge bg-dark text-white px-2 py-1">
+                                                            <RadzenIcon Icon="error" Class="me-1" Style="font-size: 0.85rem;" />
+                                                            Vencido (@Math.Abs(p.DiasHabilesRestantes) d.h.)
+                                                        </span>
+                                                    }
+                                                    else if (p.Semaforo.NivelRiesgo == "Critico")
+                                                    {
+                                                        <span class="badge bg-danger text-white px-2 py-1 animate-pulse">
+                                                            <RadzenIcon Icon="report_problem" Class="me-1" Style="font-size: 0.85rem;" />
+                                                            @p.DiasHabilesRestantes d.h. restantes
+                                                        </span>
+                                                    }
+                                                    else if (p.Semaforo.NivelRiesgo == "Alerta")
+                                                    {
+                                                        <span class="badge bg-warning text-dark px-2 py-1">
+                                                            <RadzenIcon Icon="schedule" Class="me-1" Style="font-size: 0.85rem;" />
+                                                            @p.DiasHabilesRestantes d.h. restantes
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-success text-white px-2 py-1">
+                                                            <RadzenIcon Icon="check_circle" Class="me-1" Style="font-size: 0.85rem;" />
+                                                            @p.DiasHabilesRestantes d.h.
+                                                        </span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <strong class="text-dark d-block">@p.DenominacionMarca</strong>
+                                                    <span class="text-muted small font-monospace">@p.CodigoExpediente</span>
+                                                </td>
+                                                <td>
+                                                    <span class="fw-semibold text-secondary small d-block">@p.Concepto</span>
+                                                    <span class="text-muted small">@p.Titular</span>
+                                                </td>
+                                                <td>
+                                                    <strong class="small text-danger">@p.FechaVencimientoFatal.ToString("dd/MM/yyyy")</strong>
+                                                </td>
+                                                <td class="text-end pe-3">
+                                                    <RadzenButton Icon="visibility" Text="Ficha" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
+                                                                  Click="@(() => NavigationManager.NavigateTo($"/expedientes/{p.ExpedienteId}"))" />
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- WIDGET B: CONTROL DE PUBLICACIONES EN LA GACETA (ENAG) -->
+                <div class="card bg-white shadow-sm border-0 rounded-3 overflow-hidden">
+                    <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="p-2 rounded bg-info bg-opacity-10 text-info">
+                                <RadzenIcon Icon="newspaper" Style="font-size: 1.3rem;" />
+                            </div>
+                            <div>
+                                <strong class="fs-6 text-dark d-block">Control de Publicaciones en La Gaceta (ENAG)</strong>
+                                <span class="text-muted small">Ciclo de 3 avisos de ley y prevención de abandono por falta de entrega de ejemplares físicos</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-body p-0">
+                        @if (!publicacionesActivas.Any())
+                        {
+                            <div class="p-4 text-center">
+                                <RadzenIcon Icon="check_circle" Class="text-muted fs-1 mb-2" />
+                                <h6 class="fw-bold text-dark">Sin publicaciones pendientes</h6>
+                                <p class="text-muted small mb-0">No hay avisos pendientes de tramitar ante la Empresa Nacional de Artes Gráficas.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr class="small text-muted">
+                                            <th class="ps-3">Expediente / Marca</th>
+                                            <th>Avisos en La Gaceta</th>
+                                            <th>Ejemplares Físicos (DIGEPIH)</th>
+                                            <th>Término Oposición</th>
+                                            <th class="text-end pe-3">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var pub in publicacionesActivas)
+                                        {
+                                            <tr>
+                                                <td class="ps-3">
+                                                    <strong class="text-dark d-block">@pub.DenominacionMarca</strong>
+                                                    <span class="text-muted small font-monospace">@pub.CodigoExpediente</span>
+                                                </td>
+                                                <td>
+                                                    <div class="d-flex flex-wrap gap-1">
+                                                        <span class="badge @(pub.Aviso1 != null ? "bg-success" : "bg-light text-muted border")" style="font-size: 0.72rem;">
+                                                            1er: @(pub.Aviso1?.ToString("dd/MM") ?? "Pend.")
+                                                        </span>
+                                                        <span class="badge @(pub.Aviso2 != null ? "bg-success" : "bg-light text-muted border")" style="font-size: 0.72rem;">
+                                                            2do: @(pub.Aviso2?.ToString("dd/MM") ?? "Pend.")
+                                                        </span>
+                                                        <span class="badge @(pub.Aviso3 != null ? "bg-success" : "bg-light text-muted border")" style="font-size: 0.72rem;">
+                                                            3er: @(pub.Aviso3?.ToString("dd/MM") ?? "Pend.")
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    @if (pub.EjemplaresEntregados)
+                                                    {
+                                                        <span class="badge bg-success text-white">
+                                                            <RadzenIcon Icon="task_alt" Class="me-1" Style="font-size: 0.8rem;" /> Entregados a DIGEPIH
+                                                        </span>
+                                                    }
+                                                    else if (pub.EjemplaresRecibidos)
+                                                    {
+                                                        <span class="badge bg-warning text-dark">
+                                                            <RadzenIcon Icon="inventory" Class="me-1" Style="font-size: 0.8rem;" /> Adquiridos (Radicar en IP)
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-danger text-white">
+                                                            <RadzenIcon Icon="priority_high" Class="me-1" Style="font-size: 0.8rem;" /> Comprar en ENAG
+                                                        </span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (pub.FechaFinOposicion != null)
+                                                    {
+                                                        <span class="small fw-semibold text-dark">@pub.FechaFinOposicion?.ToString("dd/MM/yyyy")</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="small text-muted">Tras 3er aviso</span>
+                                                    }
+                                                </td>
+                                                <td class="text-end pe-3">
+                                                    <RadzenButton Icon="visibility" Text="Ficha" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                                                                  Click="@(() => NavigationManager.NavigateTo($"/expedientes/{pub.ExpedienteId}"))" />
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </RadzenColumn>
+
+            <!-- COLUMNA DERECHA: EMBUDO PROCESAL Y FERIADOS NACIONALES (5 columnas) -->
+            <RadzenColumn Size="12" SizeLG="5">
+                <!-- WIDGET C: EMBUDO DEL TRÁMITE MARCARIO (DIGEPIH) -->
+                <div class="card bg-white shadow-sm border-0 mb-4 rounded-3 overflow-hidden">
+                    <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="p-2 rounded bg-primary bg-opacity-10 text-primary">
+                                <RadzenIcon Icon="filter_alt" Style="font-size: 1.3rem;" />
+                            </div>
+                            <div>
+                                <strong class="fs-6 text-dark d-block">Embudo del Trámite Marcario</strong>
+                                <span class="text-muted small">Distribución del portafolio por fases procesales</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-body p-3">
+                        <!-- Fase 1: Apertura y Búsqueda -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small fw-bold text-dark">1. Apertura y Búsqueda Preliminar</span>
+                                <span class="badge bg-primary">@countApertura (@pctApertura%)</span>
+                            </div>
+                            <div class="progress" style="height: 7px;">
+                                <div class="progress-bar bg-primary" role="progressbar" style="width: @(pctApertura)%"></div>
+                            </div>
+                            <span class="text-muted" style="font-size: 0.75rem;">Recepción de instrucciones y análisis fonético/gráfico previo</span>
+                        </div>
+
+                        <!-- Fase 2: Presentación Oficial DIGEPIH -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small fw-bold text-dark">2. Presentación Oficial ante DIGEPIH</span>
+                                <span class="badge bg-info text-white">@countPresentacion (@pctPresentacion%)</span>
+                            </div>
+                            <div class="progress" style="height: 7px;">
+                                <div class="progress-bar bg-info" role="progressbar" style="width: @(pctPresentacion)%"></div>
+                            </div>
+                            <span class="text-muted" style="font-size: 0.75rem;">Radicación formal, pago de tasas y timbres de contratación</span>
+                        </div>
+
+                        <!-- Fase 3: Examen (Forma y Fondo) -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small fw-bold text-dark">3. Examen (Forma y Fondo)</span>
+                                <span class="badge bg-warning text-dark">@countExamen (@pctExamen%)</span>
+                            </div>
+                            <div class="progress" style="height: 7px;">
+                                <div class="progress-bar bg-warning" role="progressbar" style="width: @(pctExamen)%"></div>
+                            </div>
+                            <span class="text-muted" style="font-size: 0.75rem;">Control formal (30 días) y de registrabilidad de fondo (60 días)</span>
+                        </div>
+
+                        <!-- Fase 4: Publicaciones La Gaceta y Oposición -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small fw-bold text-dark">4. Publicación en La Gaceta y Oposiciones</span>
+                                <span class="badge text-white" style="background-color: #6f42c1;">@countPublicacion (@pctPublicacion%)</span>
+                            </div>
+                            <div class="progress" style="height: 7px;">
+                                <div class="progress-bar" role="progressbar" style="width: @(pctPublicacion)%; background-color: #6f42c1;"></div>
+                            </div>
+                            <span class="text-muted" style="font-size: 0.75rem;">3 avisos cada 15 días en ENAG y plazo de 30 d.h. de oposición</span>
+                        </div>
+
+                        <!-- Fase 5: Concesión y Bóveda -->
+                        <div class="mb-1">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small fw-bold text-dark">5. Concesión, Certificado y Bóveda</span>
+                                <span class="badge bg-success">@countConcesion (@pctConcesion%)</span>
+                            </div>
+                            <div class="progress" style="height: 7px;">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: @(pctConcesion)%"></div>
+                            </div>
+                            <span class="text-muted" style="font-size: 0.75rem;">Resolución favorable, entrega con solvencia P360 y vigilancia decenal</span>
+                        </div>
+
+                        <div class="mt-3 pt-2 border-top text-center">
+                            <RadzenButton Text="Explorar Portafolio Completo" Icon="list" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" 
+                                          Class="w-100" Click="@(() => NavigationManager.NavigateTo("/expedientes"))" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WIDGET D: PRÓXIMOS FERIADOS Y ASUETOS OFICIALES DE HONDURAS (ART. 42 LPA) -->
+                <div class="card bg-white shadow-sm border-0 rounded-3 overflow-hidden">
+                    <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="p-2 rounded bg-success bg-opacity-10 text-success">
+                                <RadzenIcon Icon="event_available" Style="font-size: 1.3rem;" />
+                            </div>
+                            <div>
+                                <strong class="fs-6 text-dark d-block">Próximos Feriados Oficiales (Honduras)</strong>
+                                <span class="text-muted small">Días inhábiles procesales con suspensión de términos</span>
+                            </div>
+                        </div>
+                        <RadzenButton Icon="settings" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                                      Click="@(() => NavigationManager.NavigateTo("/configuraciones"))" title="Configurar feriados" />
+                    </div>
+
+                    <div class="card-body p-3">
+                        @if (!proximosFeriados.Any())
+                        {
+                            <span class="text-muted small">No hay feriados activos configurados en el sistema.</span>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-column gap-2 mb-3">
+                                @foreach (var f in proximosFeriados)
+                                {
+                                    <div class="p-2 rounded border bg-light d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="bg-white p-2 rounded shadow-sm text-center" style="min-width: 48px;">
+                                                <span class="d-block fw-bold text-primary lh-1" style="font-size: 1.1rem;">@f.Fecha.Day</span>
+                                                <span class="d-block text-muted text-uppercase" style="font-size: 0.65rem;">@f.Fecha.ToString("MMM", new System.Globalization.CultureInfo("es-HN"))</span>
+                                            </div>
+                                            <div>
+                                                <strong class="text-dark small d-block">@f.Nombre</strong>
+                                                <span class="text-muted" style="font-size: 0.72rem;">@(f.FundamentoLegal ?? "Decreto Ejecutivo")</span>
+                                            </div>
+                                        </div>
+                                        <span class="badge @(f.DiasRestantes <= 7 ? "bg-warning text-dark" : "bg-secondary text-white") small">
+                                            @(f.DiasRestantes == 0 ? "¡Hoy!" : $"en {f.DiasRestantes} días")
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="p-2 rounded bg-light border-start border-3 border-info">
+                                <div class="d-flex align-items-start gap-2">
+                                    <RadzenIcon Icon="info" Class="text-info" Style="font-size: 1rem; margin-top: 2px;" />
+                                    <span class="text-muted" style="font-size: 0.75rem;">
+                                        <strong>Garantía Procesal:</strong> Los plazos fatales perentorios quedan en suspenso automático en DIGEPIH y se prorrogan al siguiente día hábil oficial.
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </RadzenColumn>
+        </RadzenRow>
+
+        <!-- 4. CUADRÍCULA DE MÓDULOS DEL SISTEMA (ACCESO RÁPIDO) -->
+        <RadzenRow Gap="1rem">
+            <!-- Módulo Expedientes -->
+            <RadzenColumn Size="12" SizeSM="6" SizeLG="3">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 card-hover cursor-pointer" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/expedientes"))">
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <div class="p-3 rounded-circle bg-primary bg-opacity-10 text-primary">
+                            <RadzenIcon Icon="folder_special" Style="font-size: 1.8rem;" />
+                        </div>
+                        <div>
+                            <strong class="fs-6 text-dark d-block">Expedientes Marcarios</strong>
+                            <span class="text-muted small">Registro, etapas y plazos</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        Administre solicitudes ante DIGEPIH, clasificación Niza, poderes, resoluciones y línea de tiempo procesal.
+                    </p>
+                </div>
+            </RadzenColumn>
+
+            <!-- Módulo Clientes -->
+            <RadzenColumn Size="12" SizeSM="6" SizeLG="3">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 card-hover cursor-pointer" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/clientes"))">
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <div class="p-3 rounded-circle bg-info bg-opacity-10 text-info">
+                            <RadzenIcon Icon="people" Style="font-size: 1.8rem;" />
+                        </div>
+                        <div>
+                            <strong class="fs-6 text-dark d-block">Directorio de Clientes</strong>
+                            <span class="text-muted small">Titulares de marcas</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        Padrón oficial de personas naturales y jurídicas con RTN, contactos y cartera de signos solicitados.
+                    </p>
+                </div>
+            </RadzenColumn>
+
+            <!-- Módulo Configuraciones -->
+            <RadzenColumn Size="12" SizeSM="6" SizeLG="3">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 card-hover cursor-pointer" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/configuraciones"))">
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <div class="p-3 rounded-circle bg-secondary bg-opacity-10 text-secondary">
+                            <RadzenIcon Icon="tune" Style="font-size: 1.8rem;" />
+                        </div>
+                        <div>
+                            <strong class="fs-6 text-dark d-block">Configuraciones</strong>
+                            <span class="text-muted small">Tablas paramétricas</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        Mantenimiento en BD de tipos de signo distintivo, estados procesales, tipos de actuación y feriados nacionales.
+                    </p>
+                </div>
+            </RadzenColumn>
+
+            <!-- Módulo Litigios (Activo) -->
+            <RadzenColumn Size="12" SizeSM="6" SizeLG="3">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 card-hover cursor-pointer position-relative overflow-hidden" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/litigios"))">
+                    <div class="position-absolute top-0 end-0 m-2">
+                        <span class="badge bg-danger text-white fw-bold" style="font-size: 0.65rem;">ACTIVO</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <div class="p-3 rounded-circle bg-danger bg-opacity-10 text-danger">
+                            <RadzenIcon Icon="gavel" Style="font-size: 1.8rem;" />
+                        </div>
+                        <div>
+                            <strong class="fs-6 text-dark d-block">Litigios y Oposiciones</strong>
+                            <span class="text-muted small">Controversias marcarias</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        Oposiciones de terceros (30 d), contestaciones (10 d), auditoría de no uso, recursos de reposición y apelación.
+                    </p>
+                </div>
+            </RadzenColumn>
+        </RadzenRow>
+    }
+</div>
+
+<style>
+    .cursor-pointer {
+        cursor: pointer;
+    }
+    .card-hover {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card-hover:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 18px rgba(0,0,0,0.1) !important;
+    }
+    .border-start-danger {
+        border-left: 4px solid var(--rz-danger, #dc3545) !important;
+    }
+    @@keyframes pulse-warning {
+        0% { opacity: 1; }
+        50% { opacity: 0.6; }
+        100% { opacity: 1; }
+    }
+    .animate-pulse {
+        animation: pulse-warning 2s infinite ease-in-out;
+    }
+</style>
+
+@code {
+    private bool cargando = true;
+
+    private List<Expediente> expedientes = new();
+    private List<Cliente> clientes = new();
+    private List<FeriadoNacional> feriados = new();
+
+    private List<PlazoUrgenteDto> plazosUrgentes = new();
+    private List<PublicacionItemDto> publicacionesActivas = new();
+    private List<FeriadoProximoDto> proximosFeriados = new();
+
+    private int totalExpedientes = 0;
+    private int totalClientes = 0;
+    private int totalCriticos = 0;
+    private int totalAlertas = 0;
+    private int totalEnPlazo = 0;
+    private int totalConcedidas = 0;
+
+    // Métricas del Embudo Procesal
+    private int countApertura = 0;
+    private double pctApertura = 0;
+
+    private int countPresentacion = 0;
+    private double pctPresentacion = 0;
+
+    private int countExamen = 0;
+    private double pctExamen = 0;
+
+    private int countPublicacion = 0;
+    private double pctPublicacion = 0;
+
+    private int countConcesion = 0;
+    private double pctConcesion = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDashboard();
+    }
+
+    private async Task CargarDashboard()
+    {
+        cargando = true;
+
+        expedientes = await ExpedienteService.GetExpedientesAsync();
+        clientes = await ClienteService.GetClientesAsync();
+        feriados = await PlazosService.ObtenerFeriadosAsync();
+
+        totalExpedientes = expedientes.Count;
+        totalClientes = clientes.Count;
+
+        // 1. EVALUAR SEMÁFORO DE TODOS LOS PLAZOS ACTIVOS PENDIENTES
+        plazosUrgentes.Clear();
+        foreach (var exp in expedientes)
+        {
+            var pendientes = exp.PlazosLegales
+                .Where(p => !p.Cumplido)
+                .OrderBy(p => p.FechaVencimientoFatal);
+
+            foreach (var plazo in pendientes)
+            {
+                int dias = await PlazosService.CalcularDiasHabilesRestantesAsync(plazo.FechaVencimientoFatal);
+                var sem = PlazosService.EvaluarSemaforo(dias, false);
+                plazosUrgentes.Add(new PlazoUrgenteDto(
+                    exp.Id,
+                    exp.CodigoInterno,
+                    exp.DenominacionMarca,
+                    exp.Cliente?.NombreRazonSocial ?? "Sin titular",
+                    plazo.Concepto,
+                    plazo.FechaVencimientoFatal,
+                    dias,
+                    sem
+                ));
+            }
+        }
+
+        // Ordenar por días restantes (los más urgentes y vencidos primero)
+        plazosUrgentes = plazosUrgentes.OrderBy(p => p.DiasHabilesRestantes).ToList();
+
+        totalCriticos = plazosUrgentes.Count(p => p.Semaforo.NivelRiesgo == "Critico" || p.Semaforo.NivelRiesgo == "Vencido");
+        totalAlertas = plazosUrgentes.Count(p => p.Semaforo.NivelRiesgo == "Alerta");
+        totalEnPlazo = plazosUrgentes.Count(p => p.Semaforo.NivelRiesgo == "Normal");
+        totalConcedidas = expedientes.Count(e => e.EstadoProcesal?.Fase == "Concesión" || e.Certificado != null || e.EstadoProcesalId >= 18);
+
+        // 2. EXTRAER PUBLICACIONES EN LA GACETA (ENAG)
+        publicacionesActivas.Clear();
+        foreach (var exp in expedientes)
+        {
+            var pub = exp.Publicaciones.FirstOrDefault();
+            if (pub != null || exp.EstadoProcesal?.Fase == "Publicación" || (exp.EstadoProcesalId >= 13 && exp.EstadoProcesalId <= 17))
+            {
+                publicacionesActivas.Add(new PublicacionItemDto(
+                    exp.Id,
+                    exp.CodigoInterno,
+                    exp.DenominacionMarca,
+                    exp.Cliente?.NombreRazonSocial ?? "Sin titular",
+                    pub?.FechaPublicacionAviso1,
+                    pub?.FechaPublicacionAviso2,
+                    pub?.FechaPublicacionAviso3,
+                    pub?.EjemplaresFisicosRecibidos ?? false,
+                    pub?.EjemplaresEntregadosDIGEPIH ?? false,
+                    pub?.FechaFinPeriodoOposicion
+                ));
+            }
+        }
+
+        // 3. EMBUDO PROCESAL MARCARIO (PORCENTAJES Y CANTIDADES)
+        int totalBase = totalExpedientes > 0 ? totalExpedientes : 1;
+
+        countApertura = expedientes.Count(e => e.EstadoProcesal?.Fase == "Apertura" || e.EstadoProcesal?.Fase == "Preparación" || e.EstadoProcesalId <= 4);
+        pctApertura = Math.Round((double)countApertura / totalBase * 100, 1);
+
+        countPresentacion = expedientes.Count(e => e.EstadoProcesal?.Fase == "Presentación" || e.EstadoProcesalId == 5);
+        pctPresentacion = Math.Round((double)countPresentacion / totalBase * 100, 1);
+
+        countExamen = expedientes.Count(e => e.EstadoProcesal?.Fase == "Examen" || (e.EstadoProcesalId >= 6 && e.EstadoProcesalId <= 12));
+        pctExamen = Math.Round((double)countExamen / totalBase * 100, 1);
+
+        countPublicacion = expedientes.Count(e => e.EstadoProcesal?.Fase == "Publicación" || e.EstadoProcesal?.Fase == "Oposición" || (e.EstadoProcesalId >= 13 && e.EstadoProcesalId <= 17));
+        pctPublicacion = Math.Round((double)countPublicacion / totalBase * 100, 1);
+
+        countConcesion = expedientes.Count(e => e.EstadoProcesal?.Fase == "Concesión" || e.EstadoProcesal?.Fase == "Vigilancia" || e.EstadoProcesalId >= 18);
+        pctConcesion = Math.Round((double)countConcesion / totalBase * 100, 1);
+
+        // 4. PRÓXIMOS FERIADOS Y ASUETOS DE HONDURAS
+        DateTime hoy = DateTime.Today;
+        var listaFeriados = new List<FeriadoProximoDto>();
+        foreach (var f in feriados.Where(f => f.Activo))
+        {
+            DateTime fechaEfectiva;
+            if (f.EsFijoAnual)
+            {
+                fechaEfectiva = new DateTime(hoy.Year, f.Fecha.Month, f.Fecha.Day);
+                if (fechaEfectiva < hoy)
+                {
+                    fechaEfectiva = fechaEfectiva.AddYears(1);
+                }
+            }
+            else
+            {
+                fechaEfectiva = f.Fecha.Date;
+                if (fechaEfectiva < hoy)
+                {
+                    continue; // Asueto móvil ya transcurrido
+                }
+            }
+
+            int diasRestantes = (fechaEfectiva - hoy).Days;
+            listaFeriados.Add(new FeriadoProximoDto(f.Nombre, fechaEfectiva, f.FundamentoLegal, diasRestantes));
+        }
+
+        proximosFeriados = listaFeriados.OrderBy(f => f.Fecha).Take(4).ToList();
+
+        cargando = false;
+    }
+
+    private record PlazoUrgenteDto(
+        Guid ExpedienteId,
+        string CodigoExpediente,
+        string DenominacionMarca,
+        string Titular,
+        string Concepto,
+        DateTime FechaVencimientoFatal,
+        int DiasHabilesRestantes,
+        SemaforoPlazo Semaforo
+    );
+
+    private record PublicacionItemDto(
+        Guid ExpedienteId,
+        string CodigoExpediente,
+        string DenominacionMarca,
+        string Titular,
+        DateTime? Aviso1,
+        DateTime? Aviso2,
+        DateTime? Aviso3,
+        bool EjemplaresRecibidos,
+        bool EjemplaresEntregados,
+        DateTime? FechaFinOposicion
+    );
+
+    private record FeriadoProximoDto(
+        string Nombre,
+        DateTime Fecha,
+        string? FundamentoLegal,
+        int DiasRestantes
+    );
+}

@@ -1,0 +1,380 @@
+@page "/clientes"
+@rendermode InteractiveServer
+@using LegalTech.Web.Domain.Entities
+@using LegalTech.Web.Domain.Enums
+@using LegalTech.Web.Services
+@inject ClienteService ClienteService
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Clientes y Titulares de Marca - LegalTech Honduras</PageTitle>
+
+<div class="w-100 p-2 p-md-3">
+    <!-- Encabezado Responsive -->
+    <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3">
+        <div>
+            <RadzenText TextStyle="TextStyle.H5" TagName="TagName.H1" Class="m-0 text-primary fw-bold">
+                <RadzenIcon Icon="people" Class="me-1" /> Clientes y Titulares de Marca
+            </RadzenText>
+            <RadzenText TextStyle="TextStyle.Caption" Class="text-muted m-0">
+                Padrón oficial de solicitantes y titulares marcarios en Honduras (personas naturales y jurídicas)
+            </RadzenText>
+        </div>
+        <RadzenButton Icon="person_add" Text="Nuevo Titular / Cliente" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Medium" 
+                      Click="@AbrirNuevoCliente" Class="shadow-sm" />
+    </div>
+
+    <!-- TARJETAS DE RESUMEN DE CLIENTES -->
+    <RadzenRow Gap="1rem" Class="mb-3">
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="3">
+            <RadzenCard Class="p-3 bg-white shadow-sm border-0 d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="text-muted small d-block">Total Clientes / Titulares</span>
+                    <strong class="fs-4 text-dark">@clientes.Count</strong>
+                </div>
+                <RadzenIcon Icon="business" Class="text-primary fs-1" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="3">
+            <RadzenCard Class="p-3 bg-white shadow-sm border-0 d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="text-muted small d-block">Jurídicas Nacionales</span>
+                    <strong class="fs-4 text-info">@clientes.Count(c => c.TipoPersona == TipoPersona.JuridicaNacional)</strong>
+                </div>
+                <RadzenIcon Icon="corporate_fare" Class="text-info fs-1" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="3">
+            <RadzenCard Class="p-3 bg-white shadow-sm border-0 d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="text-muted small d-block">Jurídicas Extranjeras</span>
+                    <strong class="fs-4 text-warning">@clientes.Count(c => c.TipoPersona == TipoPersona.JuridicaExtranjera)</strong>
+                </div>
+                <RadzenIcon Icon="public" Class="text-warning fs-1" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="3">
+            <RadzenCard Class="p-3 bg-white shadow-sm border-0 d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="text-muted small d-block">Personas Naturales</span>
+                    <strong class="fs-4 text-success">@clientes.Count(c => c.TipoPersona == TipoPersona.NaturalNacional || c.TipoPersona == TipoPersona.NaturalExtranjera)</strong>
+                </div>
+                <RadzenIcon Icon="person" Class="text-success fs-1" />
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <!-- FORMULARIO DE CREACIÓN O EDICIÓN -->
+    @if (mostrarFormulario)
+    {
+        <RadzenCard Class="mb-3 p-3 p-md-4 shadow-sm border border-primary bg-white">
+            <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
+                <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                    <RadzenIcon Icon="@(clienteEditando.Id == Guid.Empty ? "person_add" : "edit")" Class="me-1" />
+                    @(clienteEditando.Id == Guid.Empty ? "Registrar Nuevo Titular / Cliente" : "Editar Datos del Titular")
+                </RadzenText>
+                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => mostrarFormulario = false)" />
+            </div>
+
+            <RadzenTemplateForm TItem="Cliente" Data="@clienteEditando" Submit="@GuardarCliente">
+                <RadzenRow Gap="1rem">
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Tipo de Persona" Class="w-100">
+                            <RadzenDropDown @bind-Value="clienteEditando.TipoPersona" 
+                                            Data="@tiposPersonaOpciones" 
+                                            TextProperty="Texto" 
+                                            ValueProperty="Valor" 
+                                            Class="w-100" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" SizeMD="8">
+                        <RadzenFormField Text="Nombre o Razón Social Completa" Class="w-100">
+                            <RadzenTextBox @bind-Value="clienteEditando.NombreRazonSocial" Placeholder="Ej: INVERSIONES COPAN S. DE R.L." Class="w-100" Required="true" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Número de Identificación (RTN o DNI)" Class="w-100">
+                            <RadzenTextBox @bind-Value="clienteEditando.NumeroIdentificacionRTN" Placeholder="Ej: 08011990123456" Class="w-100" Required="true" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" SizeMD="4">
+                        <RadzenFormField Text="Nacionalidad" Class="w-100">
+                            <RadzenTextBox @bind-Value="clienteEditando.Nacionalidad" Placeholder="Ej: Hondureña, Estadounidense..." Class="w-100" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    @if (clienteEditando.TipoPersona == TipoPersona.NaturalNacional || clienteEditando.TipoPersona == TipoPersona.NaturalExtranjera)
+                    {
+                        <RadzenColumn Size="12" SizeMD="4">
+                            <RadzenFormField Text="Estado Civil (Req. Legal en Honduras)" Class="w-100">
+                                <RadzenTextBox @bind-Value="clienteEditando.EstadoCivil" Placeholder="Ej: Soltero(a), Casado(a)" Class="w-100" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+                    }
+                    else
+                    {
+                        <RadzenColumn Size="12" SizeMD="4">
+                            <div class="p-2 border rounded bg-light h-100 d-flex flex-column justify-content-center">
+                                <div class="d-flex align-items-center gap-1">
+                                    <RadzenCheckBox @bind-Value="clienteEditando.TienePoderApostillado" Name="chkPoder" />
+                                    <RadzenLabel Text="Poder de Representación Apostillado" Component="chkPoder" />
+                                </div>
+                                <div class="d-flex align-items-center gap-1 mt-1">
+                                    <RadzenCheckBox @bind-Value="clienteEditando.TieneTraduccionJurada" Name="chkTrad" />
+                                    <RadzenLabel Text="Traducción Jurada Oficial" Component="chkTrad" />
+                                </div>
+                            </div>
+                        </RadzenColumn>
+                    }
+
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Correo Electrónico de Notificaciones" Class="w-100">
+                            <RadzenTextBox @bind-Value="clienteEditando.CorreoElectronico" Placeholder="Ej: legal@empresa.hn" Class="w-100" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Teléfono de Contacto" Class="w-100">
+                            <RadzenTextBox @bind-Value="clienteEditando.Telefono" Placeholder="Ej: +504 2239-1122" Class="w-100" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12">
+                        <RadzenFormField Text="Dirección Exacta o Domicilio Legal" Class="w-100">
+                            <RadzenTextArea @bind-Value="clienteEditando.DireccionExacta" Rows="2" Placeholder="Colonia, calle, edificio, ciudad y país de domicilio..." Class="w-100" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+
+                    <RadzenColumn Size="12" Class="text-end mt-2">
+                        <RadzenButton ButtonType="ButtonType.Submit" Icon="save" Text="Guardar Titular" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Class="me-2" />
+                        <RadzenButton ButtonType="ButtonType.Button" Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => mostrarFormulario = false)" />
+                    </RadzenColumn>
+                </RadzenRow>
+            </RadzenTemplateForm>
+        </RadzenCard>
+    }
+
+    <!-- TABLA MAESTRA DE CLIENTES Y TITULARES -->
+    <RadzenCard Class="p-2 p-md-3 shadow-sm border-0 bg-white">
+        @if (cargando)
+        {
+            <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" Class="my-3" />
+        }
+        else
+        {
+            <div class="table-responsive w-100">
+                <RadzenDataGrid Data="@clientes" TItem="Cliente" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="8"
+                                FilterMode="FilterMode.SimpleWithMenu" EmptyText="No hay clientes o titulares registrados aún."
+                                Style="min-width: 950px; width: 100%;">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="Cliente" Property="NombreRazonSocial" Title="Nombre / Razón Social" Width="260px">
+                            <Template Context="c">
+                                <div class="d-flex align-items-center gap-2">
+                                    <RadzenIcon Icon="@(c.TipoPersona == TipoPersona.JuridicaNacional || c.TipoPersona == TipoPersona.JuridicaExtranjera ? "corporate_fare" : "person")" 
+                                                Class="text-primary fs-5" />
+                                    <div>
+                                        <strong class="text-dark d-block">@c.NombreRazonSocial</strong>
+                                        <small class="text-muted">
+                                            @c.Expedientes.Count expediente(s) registrado(s)
+                                        </small>
+                                    </div>
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Cliente" Property="NumeroIdentificacionRTN" Title="RTN / Identificación" Width="150px">
+                            <Template Context="c">
+                                <span class="badge bg-light text-dark font-monospace border">
+                                    @c.NumeroIdentificacionRTN
+                                </span>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Cliente" Property="TipoPersona" Title="Tipo de Persona" Width="170px">
+                            <Template Context="c">
+                                <span class="badge @ObtenerBadgeTipoPersona(c.TipoPersona)">
+                                    @ObtenerTextoTipoPersona(c.TipoPersona)
+                                </span>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Cliente" Property="Nacionalidad" Title="Nacionalidad" Width="130px" />
+
+                        <RadzenDataGridColumn TItem="Cliente" Property="CorreoElectronico" Title="Contacto" Width="210px">
+                            <Template Context="c">
+                                <div>
+                                    <RadzenIcon Icon="email" Class="text-muted fs-6 me-1" />
+                                    <small>@c.CorreoElectronico</small>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(c.Telefono))
+                                {
+                                    <div>
+                                        <RadzenIcon Icon="phone" Class="text-muted fs-6 me-1" />
+                                        <small class="text-muted">@c.Telefono</small>
+                                    </div>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Cliente" Title="Poder / Trad." Width="120px" TextAlign="TextAlign.Center">
+                            <Template Context="c">
+                                @if (c.TipoPersona == TipoPersona.JuridicaExtranjera || c.TipoPersona == TipoPersona.NaturalExtranjera)
+                                {
+                                    <span class="badge @(c.TienePoderApostillado ? "bg-success" : "bg-danger") me-1" title="Poder Apostillado">
+                                        @(c.TienePoderApostillado ? "Apostillado" : "Sin Poder")
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-light text-secondary border">Nacional</span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <RadzenDataGridColumn TItem="Cliente" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
+                            <Template Context="c">
+                                <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
+                                              Click="@(() => EditarCliente(c))" Class="me-1" title="Editar datos" />
+                                <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.ExtraSmall" 
+                                              Click="@(() => EliminarCliente(c))" title="Eliminar titular" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </div>
+        }
+    </RadzenCard>
+</div>
+
+@code {
+    private List<Cliente> clientes = new();
+    private Cliente clienteEditando = new();
+    private bool cargando = true;
+    private bool mostrarFormulario = false;
+
+    private record OpcionTipoPersona(TipoPersona Valor, string Texto);
+    private readonly List<OpcionTipoPersona> tiposPersonaOpciones = new()
+    {
+        new(TipoPersona.JuridicaNacional, "Persona Jurídica Nacional (Sociedad Hondureña)"),
+        new(TipoPersona.NaturalNacional, "Persona Natural Nacional (Ciudadano Hondureño)"),
+        new(TipoPersona.JuridicaExtranjera, "Persona Jurídica Extranjera (Empresa del Exterior)"),
+        new(TipoPersona.NaturalExtranjera, "Persona Natural Extranjera")
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarClientes();
+    }
+
+    private async Task CargarClientes()
+    {
+        cargando = true;
+        clientes = await ClienteService.GetClientesAsync();
+        cargando = false;
+    }
+
+    private void AbrirNuevoCliente()
+    {
+        clienteEditando = new Cliente
+        {
+            Id = Guid.Empty,
+            TipoPersona = TipoPersona.JuridicaNacional,
+            Nacionalidad = "Hondureña",
+            TienePoderApostillado = true,
+            TieneTraduccionJurada = false
+        };
+        mostrarFormulario = true;
+    }
+
+    private void EditarCliente(Cliente c)
+    {
+        clienteEditando = new Cliente
+        {
+            Id = c.Id,
+            NombreRazonSocial = c.NombreRazonSocial,
+            NumeroIdentificacionRTN = c.NumeroIdentificacionRTN,
+            TipoPersona = c.TipoPersona,
+            Nacionalidad = c.Nacionalidad,
+            EstadoCivil = c.EstadoCivil,
+            DireccionExacta = c.DireccionExacta,
+            CorreoElectronico = c.CorreoElectronico,
+            Telefono = c.Telefono,
+            TienePoderApostillado = c.TienePoderApostillado,
+            TieneTraduccionJurada = c.TieneTraduccionJurada
+        };
+        mostrarFormulario = true;
+    }
+
+    private async Task GuardarCliente()
+    {
+        if (string.IsNullOrWhiteSpace(clienteEditando.NombreRazonSocial))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el nombre o razón social.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(clienteEditando.NumeroIdentificacionRTN))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el número de identificación (RTN o DNI).");
+            return;
+        }
+
+        await ClienteService.GuardarClienteAsync(clienteEditando);
+        NotificationService.Notify(NotificationSeverity.Success, "Guardado", $"Titular '{clienteEditando.NombreRazonSocial}' guardado correctamente.");
+        mostrarFormulario = false;
+        await CargarClientes();
+    }
+
+    private async Task EliminarCliente(Cliente c)
+    {
+        var confirmacion = await DialogService.Confirm(
+            $"¿Está seguro de eliminar el titular '{c.NombreRazonSocial}'?",
+            "Confirmar Eliminación",
+            new ConfirmOptions { OkButtonText = "Sí, eliminar", CancelButtonText = "Cancelar" });
+
+        if (confirmacion == true)
+        {
+            var resultado = await ClienteService.EliminarClienteAsync(c.Id);
+            if (resultado.Exito)
+            {
+                NotificationService.Notify(NotificationSeverity.Success, "Eliminado", resultado.Mensaje);
+                await CargarClientes();
+            }
+            else
+            {
+                NotificationService.Notify(NotificationSeverity.Warning, "No se puede eliminar", resultado.Mensaje);
+            }
+        }
+    }
+
+    private string ObtenerBadgeTipoPersona(TipoPersona tipo)
+    {
+        return tipo switch
+        {
+            TipoPersona.JuridicaNacional => "bg-info text-dark",
+            TipoPersona.JuridicaExtranjera => "bg-warning text-dark",
+            TipoPersona.NaturalNacional => "bg-success text-white",
+            TipoPersona.NaturalExtranjera => "bg-secondary text-white",
+            _ => "bg-light text-dark border"
+        };
+    }
+
+    private string ObtenerTextoTipoPersona(TipoPersona tipo)
+    {
+        return tipo switch
+        {
+            TipoPersona.JuridicaNacional => "Jurídica Nacional",
+            TipoPersona.JuridicaExtranjera => "Jurídica Extranjera",
+            TipoPersona.NaturalNacional => "Natural Nacional",
+            TipoPersona.NaturalExtranjera => "Natural Extranjera",
+            _ => "No Definido"
+        };
+    }
+}

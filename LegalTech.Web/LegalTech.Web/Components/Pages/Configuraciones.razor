@@ -1,0 +1,1019 @@
+@page "/configuraciones"
+@rendermode InteractiveServer
+@using LegalTech.Web.Domain.Entities
+@using LegalTech.Web.Services
+@inject CatalogoService CatalogoService
+@inject PlazosService PlazosService
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Configuraciones y Tablas Paramétricas - LegalTech Honduras</PageTitle>
+
+<div class="w-100 p-2 p-md-3">
+    <!-- Encabezado Principal -->
+    <div class="mb-3 border-bottom pb-2">
+        <RadzenText TextStyle="TextStyle.H5" TagName="TagName.H1" Class="m-0 text-primary fw-bold">
+            <RadzenIcon Icon="tune" Class="me-2" /> Configuraciones y Tablas Paramétricas
+        </RadzenText>
+        <RadzenText TextStyle="TextStyle.Caption" Class="text-muted m-0">
+            Administración centralizada de catálogos dinámicos en base de datos (cero listas en duro en código)
+        </RadzenText>
+    </div>
+
+    <!-- SELECT2 BUSCADOR MAESTRO DE CATÁLOGOS (UX OPTIMIZADA Y ESCALABLE) -->
+    <RadzenCard Class="p-3 mb-3 bg-white shadow-sm border-0">
+        <RadzenRow AlignItems="AlignItems.Center" Gap="1rem">
+            <RadzenColumn Size="12" SizeMD="5">
+                <div class="d-flex align-items-center gap-2">
+                    <RadzenIcon Icon="@ObtenerIconoCatalogoActual()" Class="text-primary fs-2" />
+                    <div>
+                        <strong class="fs-6 text-dark d-block">Seleccionar Catálogo a Administrar</strong>
+                        <span class="text-muted small">Buscador Select2: busca y selecciona la tabla que deseas configurar</span>
+                    </div>
+                </div>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="7">
+                <RadzenDropDown @bind-Value="catalogoSeleccionado" 
+                                Data="@opcionesCatalogos" 
+                                TextProperty="Nombre" 
+                                ValueProperty="Codigo" 
+                                AllowFiltering="true" 
+                                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" 
+                                Placeholder="Buscar tabla o catálogo..."
+                                Class="w-100 shadow-sm"
+                                Style="min-height: 42px;">
+                    <Template Context="op">
+                        <div class="d-flex align-items-center gap-2 py-1">
+                            <RadzenIcon Icon="@op.Icono" Class="text-primary" Style="font-size: 1.2rem;" />
+                            <div>
+                                <div class="fw-bold text-dark" style="font-size: 0.88rem;">@op.Nombre</div>
+                                <small class="text-muted" style="font-size: 0.75rem;">@op.Descripcion</small>
+                            </div>
+                        </div>
+                    </Template>
+                </RadzenDropDown>
+            </RadzenColumn>
+        </RadzenRow>
+    </RadzenCard>
+
+    @if (cargando)
+    {
+        <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" Class="my-4" />
+    }
+    else
+    {
+        <!-- ========================================================= -->
+        <!-- 1. VISTA: TIPOS DE SIGNOS DISTINTIVOS                     -->
+        <!-- ========================================================= -->
+        @if (catalogoSeleccionado == "tipos-signo")
+        {
+            <RadzenCard Class="p-3 shadow-sm border-0 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <div>
+                        <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                            <RadzenIcon Icon="category" Class="me-1" /> Catálogo de Tipos de Signos Distintivos
+                        </RadzenText>
+                        <small class="text-muted">Marcas de fábrica, servicios, denominativas, figurativas, colectivas, lemas comerciales, etc.</small>
+                    </div>
+                    <RadzenButton Icon="add_circle" Text="Nuevo Tipo de Signo" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                  Click="@AbrirNuevoTipoSigno" />
+                </div>
+
+                @if (editandoTipoSigno != null)
+                {
+                    <RadzenCard Class="mb-3 p-3 bg-light border border-primary">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <strong class="text-primary">@(editandoTipoSigno.Id == 0 ? "Crear Nuevo Tipo de Signo" : "Editar Tipo de Signo")</strong>
+                            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => editandoTipoSigno = null)" />
+                        </div>
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <RadzenFormField Text="Nombre del Signo" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoTipoSigno.Nombre" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <RadzenFormField Text="Descripción Jurídica / Alcance" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoTipoSigno.Descripcion" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" Class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <RadzenCheckBox @bind-Value="editandoTipoSigno.Activo" Name="chkSignoActivo" />
+                                    <RadzenLabel Text="Signo Activo para nuevas solicitudes" Component="chkSignoActivo" />
+                                </div>
+                                <div>
+                                    <RadzenButton Icon="save" Text="Guardar" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@GuardarTipoSigno" Class="me-2" />
+                                    <RadzenButton Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => editandoTipoSigno = null)" />
+                                </div>
+                            </RadzenColumn>
+                        </RadzenRow>
+                    </RadzenCard>
+                }
+
+                <div class="table-responsive w-100">
+                    <RadzenDataGrid Data="@tiposSigno" TItem="TipoSigno" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="7"
+                                    FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TipoSigno" Property="Id" Title="ID" Width="60px" TextAlign="TextAlign.Center" />
+                            <RadzenDataGridColumn TItem="TipoSigno" Property="Nombre" Title="Nombre del Signo" Width="220px">
+                                <Template Context="t">
+                                    <strong>@t.Nombre</strong>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TipoSigno" Property="Descripcion" Title="Descripción" />
+                            <RadzenDataGridColumn TItem="TipoSigno" Property="Activo" Title="Estado" Width="100px" TextAlign="TextAlign.Center">
+                                <Template Context="t">
+                                    <span class="badge @(t.Activo ? "bg-success" : "bg-secondary")">
+                                        @(t.Activo ? "Activo" : "Inactivo")
+                                    </span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TipoSigno" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
+                                <Template Context="t">
+                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarTipoSigno(t))" Class="me-1" />
+                                    <RadzenButton Icon="@(t.Activo ? "toggle_on" : "toggle_off")" 
+                                                  ButtonStyle="@(t.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
+                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleTipoSigno(t.Id))" 
+                                                  title="@(t.Activo ? "Desactivar" : "Activar")" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+            </RadzenCard>
+        }
+
+        <!-- ========================================================= -->
+        <!-- 2. VISTA: ESTADOS PROCESALES                              -->
+        <!-- ========================================================= -->
+        else if (catalogoSeleccionado == "estados-procesales")
+        {
+            <RadzenCard Class="p-3 shadow-sm border-0 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <div>
+                        <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                            <RadzenIcon Icon="alt_route" Class="me-1" /> Máquina de Estados Procesales del Trámite
+                        </RadzenText>
+                        <small class="text-muted">Fases oficiales del manual de marcas (Apertura, Examen, Publicación, Concesión) con orden y colores</small>
+                    </div>
+                    <RadzenButton Icon="add_circle" Text="Nuevo Estado" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                  Click="@AbrirNuevoEstadoProcesal" />
+                </div>
+
+                @if (editandoEstado != null)
+                {
+                    <RadzenCard Class="mb-3 p-3 bg-light border border-primary">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <strong class="text-primary">@(editandoEstado.Id == 0 ? "Crear Nuevo Estado Procesal" : "Editar Estado Procesal")</strong>
+                            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => editandoEstado = null)" />
+                        </div>
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Nombre del Estado" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoEstado.Nombre" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="3">
+                                <RadzenFormField Text="Fase Procesal" Class="w-100">
+                                    <RadzenDropDown @bind-Value="editandoEstado.Fase" Data="@fasesProcesalesDisponibles" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="3">
+                                <RadzenFormField Text="Color del Badge" Class="w-100">
+                                    <RadzenDropDown @bind-Value="editandoEstado.ColorBadge" Data="@coloresBadgeDisponibles" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="2">
+                                <RadzenFormField Text="Orden" Class="w-100">
+                                    <RadzenNumeric @bind-Value="editandoEstado.Orden" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" Class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <RadzenCheckBox @bind-Value="editandoEstado.Activo" Name="chkEstadoActivo" />
+                                    <RadzenLabel Text="Estado Activo en el flujo" Component="chkEstadoActivo" />
+                                </div>
+                                <div>
+                                    <RadzenButton Icon="save" Text="Guardar Estado" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@GuardarEstadoProcesal" Class="me-2" />
+                                    <RadzenButton Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => editandoEstado = null)" />
+                                </div>
+                            </RadzenColumn>
+                        </RadzenRow>
+                    </RadzenCard>
+                }
+
+                <div class="table-responsive w-100">
+                    <RadzenDataGrid Data="@estadosProcesales" TItem="EstadoProcesal" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="7"
+                                    FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="EstadoProcesal" Property="Orden" Title="Orden" Width="70px" TextAlign="TextAlign.Center" />
+                            <RadzenDataGridColumn TItem="EstadoProcesal" Property="Nombre" Title="Nombre del Estado" Width="260px">
+                                <Template Context="ep">
+                                    <strong>@ep.Nombre</strong>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="EstadoProcesal" Property="Fase" Title="Fase" Width="130px">
+                                <Template Context="ep">
+                                    <span class="badge bg-light text-dark border">@ep.Fase</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="EstadoProcesal" Property="ColorBadge" Title="Vista Previa Badge" Width="140px" TextAlign="TextAlign.Center">
+                                <Template Context="ep">
+                                    <RadzenBadge BadgeStyle="@GetBadgeStyleFromColor(ep.ColorBadge)" Text="@ep.ColorBadge" Size="BadgeSize.Small" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="EstadoProcesal" Property="Activo" Title="Estado" Width="90px" TextAlign="TextAlign.Center">
+                                <Template Context="ep">
+                                    <span class="badge @(ep.Activo ? "bg-success" : "bg-secondary")">
+                                        @(ep.Activo ? "Activo" : "Inactivo")
+                                    </span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="EstadoProcesal" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
+                                <Template Context="ep">
+                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarEstadoProcesal(ep))" Class="me-1" />
+                                    <RadzenButton Icon="@(ep.Activo ? "toggle_on" : "toggle_off")" 
+                                                  ButtonStyle="@(ep.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
+                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleEstadoProcesal(ep.Id))" 
+                                                  title="@(ep.Activo ? "Desactivar" : "Activar")" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+            </RadzenCard>
+        }
+
+        <!-- ========================================================= -->
+        <!-- 3. VISTA: TIPOS DE ACTUACIONES / HITOS                   -->
+        <!-- ========================================================= -->
+        else if (catalogoSeleccionado == "tipos-actuaciones")
+        {
+            <RadzenCard Class="p-3 shadow-sm border-0 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <div>
+                        <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                            <RadzenIcon Icon="history_edu" Class="me-1" /> Catálogo de Actuaciones e Hitos de Línea de Tiempo
+                        </RadzenText>
+                        <small class="text-muted">Autos, prevenciones, notificaciones oficiales, avisos y resoluciones con sus iconos y estilos</small>
+                    </div>
+                    <RadzenButton Icon="add_circle" Text="Nueva Actuación" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                  Click="@AbrirNuevoTipoActuacion" />
+                </div>
+
+                @if (editandoActuacion != null)
+                {
+                    <RadzenCard Class="mb-3 p-3 bg-light border border-primary">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <strong class="text-primary">@(editandoActuacion.Id == 0 ? "Crear Tipo de Actuación" : "Editar Tipo de Actuación")</strong>
+                            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => editandoActuacion = null)" />
+                        </div>
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Nombre de la Actuación" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoActuacion.Nombre" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="3">
+                                <RadzenFormField Text="Icono (Radzen Icon)" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoActuacion.Icono" Placeholder="ej: warning, gavel, check" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="3">
+                                <RadzenFormField Text="Color" Class="w-100">
+                                    <RadzenDropDown @bind-Value="editandoActuacion.Color" Data="@coloresBadgeDisponibles" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="2">
+                                <div class="p-2 border rounded bg-white text-center h-100">
+                                    <small class="text-muted d-block">Vista Previa</small>
+                                    <RadzenIcon Icon="@(editandoActuacion.Icono ?? "event_note")" Class="@($"text-{(editandoActuacion.Color ?? "primary")} fs-4")" />
+                                </div>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12">
+                                <RadzenFormField Text="Descripción Jurídica" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoActuacion.Descripcion" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" Class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div>
+                                        <RadzenCheckBox @bind-Value="editandoActuacion.RequiereDocumentoAdjunto" Name="chkReqDoc" />
+                                        <RadzenLabel Text="Requiere Documento Escaneado Adjunto" Component="chkReqDoc" Class="ms-1" />
+                                    </div>
+                                    <div>
+                                        <RadzenCheckBox @bind-Value="editandoActuacion.Activo" Name="chkActActivo" />
+                                        <RadzenLabel Text="Activo" Component="chkActActivo" Class="ms-1" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <RadzenButton Icon="save" Text="Guardar Actuación" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@GuardarTipoActuacion" Class="me-2" />
+                                    <RadzenButton Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => editandoActuacion = null)" />
+                                </div>
+                            </RadzenColumn>
+                        </RadzenRow>
+                    </RadzenCard>
+                }
+
+                <div class="table-responsive w-100">
+                    <RadzenDataGrid Data="@tiposActuaciones" TItem="TipoActuacion" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="7"
+                                    FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TipoActuacion" Title="Icono" Width="70px" TextAlign="TextAlign.Center">
+                                <Template Context="ta">
+                                    <RadzenIcon Icon="@(ta.Icono ?? "event_note")" Class="@($"text-{(ta.Color ?? "primary")}")" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TipoActuacion" Property="Nombre" Title="Nombre de la Actuación" Width="260px">
+                                <Template Context="ta">
+                                    <strong>@ta.Nombre</strong>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TipoActuacion" Property="Descripcion" Title="Descripción" />
+                            <RadzenDataGridColumn TItem="TipoActuacion" Property="RequiereDocumentoAdjunto" Title="Doc. Requerido" Width="120px" TextAlign="TextAlign.Center">
+                                <Template Context="ta">
+                                    <span class="badge @(ta.RequiereDocumentoAdjunto ? "bg-warning text-dark" : "bg-light text-muted border")">
+                                        @(ta.RequiereDocumentoAdjunto ? "Obligatorio" : "Opcional")
+                                    </span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TipoActuacion" Property="Activo" Title="Estado" Width="90px" TextAlign="TextAlign.Center">
+                                <Template Context="ta">
+                                    <span class="badge @(ta.Activo ? "bg-success" : "bg-secondary")">
+                                        @(ta.Activo ? "Activo" : "Inactivo")
+                                    </span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TipoActuacion" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
+                                <Template Context="ta">
+                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarTipoActuacion(ta))" Class="me-1" />
+                                    <RadzenButton Icon="@(ta.Activo ? "toggle_on" : "toggle_off")" 
+                                                  ButtonStyle="@(ta.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
+                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleTipoActuacion(ta.Id))" 
+                                                  title="@(ta.Activo ? "Desactivar" : "Activar")" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+            </RadzenCard>
+        }
+
+        <!-- ========================================================= -->
+        <!-- 4. VISTA: VÍAS DE PRESENTACIÓN DIGEPIH                   -->
+        <!-- ========================================================= -->
+        else if (catalogoSeleccionado == "vias-presentacion")
+        {
+            <RadzenCard Class="p-3 shadow-sm border-0 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <div>
+                        <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                            <RadzenIcon Icon="login" Class="me-1" /> Vías de Presentación Oficial ante DIGEPIH
+                        </RadzenText>
+                        <small class="text-muted">Ventanillas físicas autorizadas (Tegucigalpa, SPS) o portal electrónico digital</small>
+                    </div>
+                    <RadzenButton Icon="add_circle" Text="Nueva Vía" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                  Click="@AbrirNuevaViaPresentacion" />
+                </div>
+
+                @if (editandoVia != null)
+                {
+                    <RadzenCard Class="mb-3 p-3 bg-light border border-primary">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <strong class="text-primary">@(editandoVia.Id == 0 ? "Crear Vía de Presentación" : "Editar Vía de Presentación")</strong>
+                            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => editandoVia = null)" />
+                        </div>
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <RadzenFormField Text="Nombre de la Vía" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoVia.Nombre" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <RadzenFormField Text="Descripción" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoVia.Descripcion" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" Class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <RadzenCheckBox @bind-Value="editandoVia.Activo" Name="chkViaActiva" />
+                                    <RadzenLabel Text="Vía Activa para solicitudes" Component="chkViaActiva" />
+                                </div>
+                                <div>
+                                    <RadzenButton Icon="save" Text="Guardar Vía" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@GuardarViaPresentacion" Class="me-2" />
+                                    <RadzenButton Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => editandoVia = null)" />
+                                </div>
+                            </RadzenColumn>
+                        </RadzenRow>
+                    </RadzenCard>
+                }
+
+                <div class="table-responsive w-100">
+                    <RadzenDataGrid Data="@viasPresentacion" TItem="ViaPresentacion" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="7"
+                                    FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="ViaPresentacion" Property="Id" Title="ID" Width="60px" TextAlign="TextAlign.Center" />
+                            <RadzenDataGridColumn TItem="ViaPresentacion" Property="Nombre" Title="Vía de Presentación" Width="260px">
+                                <Template Context="vp">
+                                    <strong>@vp.Nombre</strong>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="ViaPresentacion" Property="Descripcion" Title="Descripción" />
+                            <RadzenDataGridColumn TItem="ViaPresentacion" Property="Activo" Title="Estado" Width="100px" TextAlign="TextAlign.Center">
+                                <Template Context="vp">
+                                    <span class="badge @(vp.Activo ? "bg-success" : "bg-secondary")">
+                                        @(vp.Activo ? "Activo" : "Inactivo")
+                                    </span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="ViaPresentacion" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
+                                <Template Context="vp">
+                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarViaPresentacion(vp))" Class="me-1" />
+                                    <RadzenButton Icon="@(vp.Activo ? "toggle_on" : "toggle_off")" 
+                                                  ButtonStyle="@(vp.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
+                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleViaPresentacion(vp.Id))" 
+                                                  title="@(vp.Activo ? "Desactivar" : "Activar")" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+            </RadzenCard>
+        }
+
+        <!-- ========================================================= -->
+        <!-- 5. VISTA: UBICACIONES FÍSICAS DE ARCHIVO / BÓVEDA        -->
+        <!-- ========================================================= -->
+        else if (catalogoSeleccionado == "ubicaciones-archivo")
+        {
+            <RadzenCard Class="p-3 shadow-sm border-0 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <div>
+                        <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                            <RadzenIcon Icon="inventory" Class="me-1" /> Ubicaciones Físicas de Archivo y Bóveda
+                        </RadzenText>
+                        <small class="text-muted">Control de resguardo de títulos originales, expedientes activos, litigios y archivo pasivo</small>
+                    </div>
+                    <RadzenButton Icon="add_circle" Text="Nueva Ubicación" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                  Click="@AbrirNuevaUbicacionArchivo" />
+                </div>
+
+                @if (editandoUbicacion != null)
+                {
+                    <RadzenCard Class="mb-3 p-3 bg-light border border-primary">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <strong class="text-primary">@(editandoUbicacion.Id == 0 ? "Crear Ubicación de Archivo" : "Editar Ubicación de Archivo")</strong>
+                            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => editandoUbicacion = null)" />
+                        </div>
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="3">
+                                <RadzenFormField Text="Código de Área" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoUbicacion.CodigoArea" Placeholder="Ej: BOV-TIT-01" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Nombre de Ubicación" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoUbicacion.Nombre" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="5">
+                                <RadzenFormField Text="Descripción" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoUbicacion.Descripcion" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" Class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <RadzenCheckBox @bind-Value="editandoUbicacion.Activo" Name="chkUbicActiva" />
+                                    <RadzenLabel Text="Ubicación Activa para resguardo" Component="chkUbicActiva" />
+                                </div>
+                                <div>
+                                    <RadzenButton Icon="save" Text="Guardar Ubicación" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@GuardarUbicacionArchivo" Class="me-2" />
+                                    <RadzenButton Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => editandoUbicacion = null)" />
+                                </div>
+                            </RadzenColumn>
+                        </RadzenRow>
+                    </RadzenCard>
+                }
+
+                <div class="table-responsive w-100">
+                    <RadzenDataGrid Data="@ubicacionesArchivo" TItem="UbicacionArchivo" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="7"
+                                    FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="UbicacionArchivo" Property="CodigoArea" Title="Código" Width="130px">
+                                <Template Context="ua">
+                                    <span class="badge bg-dark font-monospace">@ua.CodigoArea</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="UbicacionArchivo" Property="Nombre" Title="Nombre de la Ubicación" Width="260px">
+                                <Template Context="ua">
+                                    <strong>@ua.Nombre</strong>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="UbicacionArchivo" Property="Descripcion" Title="Descripción" />
+                            <RadzenDataGridColumn TItem="UbicacionArchivo" Property="Activo" Title="Estado" Width="100px" TextAlign="TextAlign.Center">
+                                <Template Context="ua">
+                                    <span class="badge @(ua.Activo ? "bg-success" : "bg-secondary")">
+                                        @(ua.Activo ? "Activo" : "Inactivo")
+                                    </span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="UbicacionArchivo" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
+                                <Template Context="ua">
+                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarUbicacionArchivo(ua))" Class="me-1" />
+                                    <RadzenButton Icon="@(ua.Activo ? "toggle_on" : "toggle_off")" 
+                                                  ButtonStyle="@(ua.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
+                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleUbicacionArchivo(ua.Id))" 
+                                                  title="@(ua.Activo ? "Desactivar" : "Activar")" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+            </RadzenCard>
+        }
+
+        <!-- ========================================================= -->
+        <!-- 6. VISTA: CALENDARIO DE FERIADOS Y ASUETOS NACIONALES     -->
+        <!-- ========================================================= -->
+        else if (catalogoSeleccionado == "feriados-nacionales")
+        {
+            <RadzenCard Class="p-3 shadow-sm border-0 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <div>
+                        <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                            <RadzenIcon Icon="calendar_month" Class="me-1" /> Calendario de Feriados y Asuetos Nacionales (Art. 42 LPA)
+                        </RadzenText>
+                        <small class="text-muted">Días inhábiles oficiales de Honduras para el cómputo automático de términos legales fatales ante DIGEPIH</small>
+                    </div>
+                    <RadzenButton Icon="add_circle" Text="Nuevo Feriado / Asueto" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                  Click="@AbrirNuevoFeriado" />
+                </div>
+
+                @if (editandoFeriado != null)
+                {
+                    <RadzenCard Class="mb-3 p-3 bg-light border border-primary">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <strong class="text-primary">@(editandoFeriado.Id == 0 ? "Registrar Nuevo Feriado o Asueto" : "Editar Feriado o Asueto")</strong>
+                            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => editandoFeriado = null)" />
+                        </div>
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="3">
+                                <RadzenFormField Text="Fecha del Feriado" Class="w-100">
+                                    <RadzenDatePicker @bind-Value="editandoFeriado.Fecha" DateFormat="dd/MM/yyyy" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Nombre Oficial del Feriado" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoFeriado.Nombre" Placeholder="Ej: Año Nuevo, Semana Morazánica..." Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="5">
+                                <RadzenFormField Text="Fundamento Legal / Decreto" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoFeriado.FundamentoLegal" Placeholder="Ej: Art. 339 Cód. Trabajo, Decreto 78-2015" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" Class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="d-flex align-items-center gap-1">
+                                        <RadzenCheckBox @bind-Value="editandoFeriado.EsFijoAnual" Name="chkFijoAnual" />
+                                        <RadzenLabel Text="Feriado Fijo Anual (Mismo mes y día cada año)" Component="chkFijoAnual" />
+                                    </div>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <RadzenCheckBox @bind-Value="editandoFeriado.Activo" Name="chkFeriadoActivo" />
+                                        <RadzenLabel Text="Habilitado para Cómputo" Component="chkFeriadoActivo" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <RadzenButton Icon="save" Text="Guardar Feriado" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@GuardarFeriado" Class="me-2" />
+                                    <RadzenButton Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => editandoFeriado = null)" />
+                                </div>
+                            </RadzenColumn>
+                        </RadzenRow>
+                    </RadzenCard>
+                }
+
+                <div class="table-responsive w-100">
+                    <RadzenDataGrid Data="@feriadosNacionales" TItem="FeriadoNacional" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10"
+                                    FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="FeriadoNacional" Property="Fecha" Title="Fecha" Width="130px">
+                                <Template Context="f">
+                                    <strong>@f.Fecha.ToString("dd/MM/yyyy")</strong>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FeriadoNacional" Property="Nombre" Title="Nombre Oficial" Width="260px">
+                                <Template Context="f">
+                                    <div class="d-flex align-items-center gap-1">
+                                        <RadzenIcon Icon="event" Class="text-primary fs-6" />
+                                        <span>@f.Nombre</span>
+                                    </div>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FeriadoNacional" Property="FundamentoLegal" Title="Fundamento Legal / Decreto" />
+                            <RadzenDataGridColumn TItem="FeriadoNacional" Property="EsFijoAnual" Title="Tipo" Width="140px" TextAlign="TextAlign.Center">
+                                <Template Context="f">
+                                    <span class="badge @(f.EsFijoAnual ? "bg-info text-dark" : "bg-warning text-dark")">
+                                        @(f.EsFijoAnual ? "Fijo Anual" : "Asueto Móvil")
+                                    </span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FeriadoNacional" Property="Activo" Title="Estado" Width="100px" TextAlign="TextAlign.Center">
+                                <Template Context="f">
+                                    <span class="badge @(f.Activo ? "bg-success" : "bg-secondary")">
+                                        @(f.Activo ? "Inhábil" : "Deshabilitado")
+                                    </span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FeriadoNacional" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
+                                <Template Context="f">
+                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarFeriado(f))" Class="me-1" />
+                                    <RadzenButton Icon="@(f.Activo ? "toggle_on" : "toggle_off")" 
+                                                  ButtonStyle="@(f.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
+                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleFeriado(f.Id))" 
+                                                  title="@(f.Activo ? "Desactivar" : "Activar")" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+            </RadzenCard>
+        }
+
+        <!-- ========================================================= -->
+        <!-- 7. VISTA: ACCESO A GESTIÓN DE CLIENTES / TITULARES       -->
+        <!-- ========================================================= -->
+        else if (catalogoSeleccionado == "clientes")
+        {
+            <RadzenCard Class="p-5 shadow-sm border-0 bg-white text-center">
+                <RadzenIcon Icon="people" Class="text-primary" Style="font-size: 3.5rem;" />
+                <h5 class="fw-bold mt-3 text-dark">Padrón de Clientes y Titulares de Marca</h5>
+                <p class="text-muted mx-auto" style="max-width: 600px;">
+                    El padrón oficial de titulares cuenta con una pantalla completa dedicada para gestionar personas naturales y jurídicas, RTN, poderes apostillados de empresas extranjeras y su vinculación con los expedientes marcarios.
+                </p>
+                <div class="mt-3">
+                    <RadzenButton Icon="open_in_new" Text="Abrir Módulo de Clientes y Titulares" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Medium" 
+                                  Click="@(() => NavigationManager.NavigateTo("/clientes"))" />
+                </div>
+            </RadzenCard>
+        }
+    }
+</div>
+
+@code {
+    private bool cargando = true;
+
+    // Catálogo activo seleccionado en el Select2
+    private string catalogoSeleccionado = "tipos-signo";
+
+    // Modelo para las opciones del Select2
+    private record OpcionCatalogo(string Codigo, string Nombre, string Icono, string Descripcion);
+
+    private readonly List<OpcionCatalogo> opcionesCatalogos = new()
+    {
+        new("tipos-signo", "Tipos de Signos Distintivos", "category", "Marcas, lemas comerciales, nombres comerciales y denominaciones"),
+        new("estados-procesales", "Estados Procesales del Trámite", "alt_route", "Máquina de estados, fases del manual y badges"),
+        new("tipos-actuaciones", "Tipos de Actuaciones e Hitos", "history_edu", "Autos, prevenciones, avisos y resoluciones para la línea de tiempo"),
+        new("vias-presentacion", "Vías de Presentación Oficial DIGEPIH", "login", "Ventanillas autorizadas (Tegucigalpa, SPS, Portal en Línea)"),
+        new("ubicaciones-archivo", "Ubicaciones Físicas de Archivo y Bóveda", "inventory", "Custodia física de títulos originales y gavetas activas"),
+        new("feriados-nacionales", "Feriados y Asuetos Nacionales (Art. 42 LPA)", "calendar_month", "Calendario de días inhábiles para el cómputo automático de plazos fatales"),
+        new("clientes", "Clientes y Titulares de Marcas", "people", "Administración del padrón de personas naturales y jurídicas con RTN")
+    };
+
+    // Listas maestras cargadas desde Base de Datos
+    private List<TipoSigno> tiposSigno = new();
+    private List<EstadoProcesal> estadosProcesales = new();
+    private List<TipoActuacion> tiposActuaciones = new();
+    private List<ViaPresentacion> viasPresentacion = new();
+    private List<UbicacionArchivo> ubicacionesArchivo = new();
+    private List<FeriadoNacional> feriadosNacionales = new();
+
+    // Modelos para edición/creación
+    private TipoSigno? editandoTipoSigno;
+    private EstadoProcesal? editandoEstado;
+    private TipoActuacion? editandoActuacion;
+    private ViaPresentacion? editandoVia;
+    private UbicacionArchivo? editandoUbicacion;
+    private FeriadoNacional? editandoFeriado;
+
+    private readonly List<string> fasesProcesalesDisponibles = new()
+    {
+        "Apertura", "Preparación", "Presentación", "Examen", "Publicación", "Oposición", "Concesión", "Vigilancia"
+    };
+
+    private readonly List<string> coloresBadgeDisponibles = new()
+    {
+        "primary", "success", "danger", "warning", "info", "secondary"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarCatalogos();
+    }
+
+    private string ObtenerIconoCatalogoActual()
+    {
+        return opcionesCatalogos.FirstOrDefault(o => o.Codigo == catalogoSeleccionado)?.Icono ?? "tune";
+    }
+
+    private async Task CargarCatalogos()
+    {
+        cargando = true;
+        tiposSigno = await CatalogoService.GetTiposSignoAsync(soloActivos: false);
+        estadosProcesales = await CatalogoService.GetEstadosProcesalesAsync(soloActivos: false);
+        tiposActuaciones = await CatalogoService.GetTiposActuacionesAsync(soloActivos: false);
+        viasPresentacion = await CatalogoService.GetViasPresentacionAsync(soloActivos: false);
+        ubicacionesArchivo = await CatalogoService.GetUbicacionesArchivoAsync(soloActivos: false);
+        feriadosNacionales = await PlazosService.ObtenerFeriadosAsync();
+        cargando = false;
+    }
+
+    // -------------------------------------------------------------
+    // GESTIÓN DE TIPOS DE SIGNO
+    // -------------------------------------------------------------
+    private void AbrirNuevoTipoSigno()
+    {
+        editandoTipoSigno = new TipoSigno { Activo = true };
+    }
+
+    private void EditarTipoSigno(TipoSigno item)
+    {
+        editandoTipoSigno = new TipoSigno
+        {
+            Id = item.Id,
+            Nombre = item.Nombre,
+            Descripcion = item.Descripcion,
+            Activo = item.Activo
+        };
+    }
+
+    private async Task GuardarTipoSigno()
+    {
+        if (editandoTipoSigno == null) return;
+        if (string.IsNullOrWhiteSpace(editandoTipoSigno.Nombre))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el nombre del tipo de signo.");
+            return;
+        }
+
+        await CatalogoService.GuardarTipoSignoAsync(editandoTipoSigno);
+        NotificationService.Notify(NotificationSeverity.Success, "Guardado", "Tipo de signo guardado correctamente.");
+        editandoTipoSigno = null;
+        await CargarCatalogos();
+    }
+
+    private async Task ToggleTipoSigno(int id)
+    {
+        await CatalogoService.ToggleTipoSignoAsync(id);
+        NotificationService.Notify(NotificationSeverity.Info, "Estado Actualizado", "Estado del signo actualizado.");
+        await CargarCatalogos();
+    }
+
+    // -------------------------------------------------------------
+    // GESTIÓN DE ESTADOS PROCESALES
+    // -------------------------------------------------------------
+    private void AbrirNuevoEstadoProcesal()
+    {
+        editandoEstado = new EstadoProcesal
+        {
+            Fase = "Apertura",
+            ColorBadge = "primary",
+            Activo = true
+        };
+    }
+
+    private void EditarEstadoProcesal(EstadoProcesal item)
+    {
+        editandoEstado = new EstadoProcesal
+        {
+            Id = item.Id,
+            Nombre = item.Nombre,
+            Fase = item.Fase,
+            ColorBadge = item.ColorBadge,
+            Orden = item.Orden,
+            Activo = item.Activo
+        };
+    }
+
+    private async Task GuardarEstadoProcesal()
+    {
+        if (editandoEstado == null) return;
+        if (string.IsNullOrWhiteSpace(editandoEstado.Nombre))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el nombre del estado procesal.");
+            return;
+        }
+
+        await CatalogoService.GuardarEstadoProcesalAsync(editandoEstado);
+        NotificationService.Notify(NotificationSeverity.Success, "Guardado", "Estado procesal guardado correctamente.");
+        editandoEstado = null;
+        await CargarCatalogos();
+    }
+
+    private async Task ToggleEstadoProcesal(int id)
+    {
+        await CatalogoService.ToggleEstadoProcesalAsync(id);
+        NotificationService.Notify(NotificationSeverity.Info, "Estado Actualizado", "Estado procesal activado/desactivado.");
+        await CargarCatalogos();
+    }
+
+    // -------------------------------------------------------------
+    // GESTIÓN DE TIPOS DE ACTUACIONES
+    // -------------------------------------------------------------
+    private void AbrirNuevoTipoActuacion()
+    {
+        editandoActuacion = new TipoActuacion
+        {
+            Icono = "event_note",
+            Color = "primary",
+            Activo = true
+        };
+    }
+
+    private void EditarTipoActuacion(TipoActuacion item)
+    {
+        editandoActuacion = new TipoActuacion
+        {
+            Id = item.Id,
+            Nombre = item.Nombre,
+            Icono = item.Icono,
+            Color = item.Color,
+            Descripcion = item.Descripcion,
+            RequiereDocumentoAdjunto = item.RequiereDocumentoAdjunto,
+            Activo = item.Activo
+        };
+    }
+
+    private async Task GuardarTipoActuacion()
+    {
+        if (editandoActuacion == null) return;
+        if (string.IsNullOrWhiteSpace(editandoActuacion.Nombre))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el nombre de la actuación.");
+            return;
+        }
+
+        await CatalogoService.GuardarTipoActuacionAsync(editandoActuacion);
+        NotificationService.Notify(NotificationSeverity.Success, "Guardado", "Tipo de actuación guardado correctamente.");
+        editandoActuacion = null;
+        await CargarCatalogos();
+    }
+
+    private async Task ToggleTipoActuacion(int id)
+    {
+        await CatalogoService.ToggleTipoActuacionAsync(id);
+        NotificationService.Notify(NotificationSeverity.Info, "Estado Actualizado", "Actuación procesal activada/desactivada.");
+        await CargarCatalogos();
+    }
+
+    // -------------------------------------------------------------
+    // GESTIÓN DE VÍAS DE PRESENTACIÓN
+    // -------------------------------------------------------------
+    private void AbrirNuevaViaPresentacion()
+    {
+        editandoVia = new ViaPresentacion { Activo = true };
+    }
+
+    private void EditarViaPresentacion(ViaPresentacion item)
+    {
+        editandoVia = new ViaPresentacion
+        {
+            Id = item.Id,
+            Nombre = item.Nombre,
+            Descripcion = item.Descripcion,
+            Activo = item.Activo
+        };
+    }
+
+    private async Task GuardarViaPresentacion()
+    {
+        if (editandoVia == null) return;
+        if (string.IsNullOrWhiteSpace(editandoVia.Nombre))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el nombre de la vía.");
+            return;
+        }
+
+        await CatalogoService.GuardarViaPresentacionAsync(editandoVia);
+        NotificationService.Notify(NotificationSeverity.Success, "Guardado", "Vía de presentación guardada correctamente.");
+        editandoVia = null;
+        await CargarCatalogos();
+    }
+
+    private async Task ToggleViaPresentacion(int id)
+    {
+        await CatalogoService.ToggleViaPresentacionAsync(id);
+        NotificationService.Notify(NotificationSeverity.Info, "Estado Actualizado", "Vía de presentación actualizada.");
+        await CargarCatalogos();
+    }
+
+    // -------------------------------------------------------------
+    // GESTIÓN DE UBICACIONES DE ARCHIVO
+    // -------------------------------------------------------------
+    private void AbrirNuevaUbicacionArchivo()
+    {
+        editandoUbicacion = new UbicacionArchivo
+        {
+            CodigoArea = "NUE-01",
+            Activo = true
+        };
+    }
+
+    private void EditarUbicacionArchivo(UbicacionArchivo item)
+    {
+        editandoUbicacion = new UbicacionArchivo
+        {
+            Id = item.Id,
+            CodigoArea = item.CodigoArea,
+            Nombre = item.Nombre,
+            Descripcion = item.Descripcion,
+            Activo = item.Activo
+        };
+    }
+
+    private async Task GuardarUbicacionArchivo()
+    {
+        if (editandoUbicacion == null) return;
+        if (string.IsNullOrWhiteSpace(editandoUbicacion.Nombre))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el nombre de la ubicación.");
+            return;
+        }
+
+        await CatalogoService.GuardarUbicacionArchivoAsync(editandoUbicacion);
+        NotificationService.Notify(NotificationSeverity.Success, "Guardado", "Ubicación de archivo guardada correctamente.");
+        editandoUbicacion = null;
+        await CargarCatalogos();
+    }
+
+    private async Task ToggleUbicacionArchivo(int id)
+    {
+        await CatalogoService.ToggleUbicacionArchivoAsync(id);
+        NotificationService.Notify(NotificationSeverity.Info, "Estado Actualizado", "Ubicación de archivo actualizada.");
+        await CargarCatalogos();
+    }
+
+    // -------------------------------------------------------------
+    // GESTIÓN DE FERIADOS Y ASUETOS NACIONALES
+    // -------------------------------------------------------------
+    private void AbrirNuevoFeriado()
+    {
+        editandoFeriado = new FeriadoNacional
+        {
+            Fecha = DateTime.Today,
+            Nombre = string.Empty,
+            FundamentoLegal = "Art. 339 Código del Trabajo",
+            EsFijoAnual = true,
+            Activo = true
+        };
+    }
+
+    private void EditarFeriado(FeriadoNacional f)
+    {
+        editandoFeriado = new FeriadoNacional
+        {
+            Id = f.Id,
+            Fecha = f.Fecha,
+            Nombre = f.Nombre,
+            FundamentoLegal = f.FundamentoLegal,
+            EsFijoAnual = f.EsFijoAnual,
+            Activo = f.Activo
+        };
+    }
+
+    private async Task GuardarFeriado()
+    {
+        if (editandoFeriado == null) return;
+        if (string.IsNullOrWhiteSpace(editandoFeriado.Nombre))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe ingresar el nombre del feriado o asueto.");
+            return;
+        }
+
+        await PlazosService.GuardarFeriadoAsync(editandoFeriado);
+        NotificationService.Notify(NotificationSeverity.Success, "Guardado", "Feriado oficial registrado en el calendario.");
+        editandoFeriado = null;
+        await CargarCatalogos();
+    }
+
+    private async Task ToggleFeriado(int id)
+    {
+        await PlazosService.ToggleFeriadoAsync(id);
+        NotificationService.Notify(NotificationSeverity.Info, "Estado Actualizado", "Feriado actualizado.");
+        await CargarCatalogos();
+    }
+
+    private BadgeStyle GetBadgeStyleFromColor(string? color)
+    {
+        return color?.ToLowerInvariant() switch
+        {
+            "success" => BadgeStyle.Success,
+            "warning" => BadgeStyle.Warning,
+            "danger" => BadgeStyle.Danger,
+            "info" => BadgeStyle.Info,
+            "secondary" => BadgeStyle.Secondary,
+            _ => BadgeStyle.Primary
+        };
+    }
+}
