@@ -5,6 +5,7 @@
 @inject CatalogoService CatalogoService
 @inject PlazosService PlazosService
 @inject FacturacionService FacturacionService
+@inject ConfiguracionService ConfiguracionService
 @inject NotificationService NotificationService
 @inject DialogService DialogService
 @inject NavigationManager NavigationManager
@@ -909,6 +910,150 @@
                 </div>
             </RadzenCard>
         }
+
+        <!-- ========================================================= -->
+        <!-- 9. VISTA: CONFIGURACIONES DEL SISTEMA Y ALMACENAMIENTO    -->
+        <!-- ========================================================= -->
+        @if (catalogoSeleccionado == "configuraciones-sistema")
+        {
+            <RadzenCard Class="p-3 shadow-sm border-0 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <div>
+                        <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                            <RadzenIcon Icon="dns" Class="me-1" /> Parámetros del Sistema y Almacenamiento (Synology NAS)
+                        </RadzenText>
+                        <small class="text-muted">Gestión de rutas de guardado local, conexión externa con Synology NAS y llaves dinámicas sin código en duro.</small>
+                    </div>
+                    <RadzenButton Icon="add_circle" Text="Nueva Llave de Configuración" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                  Click="@AbrirNuevaConfiguracion" />
+                </div>
+
+                <!-- SELECTOR RÁPIDO DEL MODO DE ALMACENAMIENTO ACTIVO -->
+                <div class="p-3 mb-3 rounded bg-light border">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <RadzenIcon Icon="storage" Class="text-primary fs-3" />
+                            <div>
+                                <strong class="text-dark d-block">Proveedor de Almacenamiento de Documentos Activo:</strong>
+                                @{
+                                    string modoActual = configuracionesSistema.FirstOrDefault(c => c.Llave == "TipoAlmacenamiento")?.Valor ?? "LOCAL";
+                                }
+                                <span class="badge @(modoActual.ToUpper() == "SYNOLOGY" ? "bg-info text-dark" : "bg-primary text-white") fs-6">
+                                    @(modoActual.ToUpper() == "SYNOLOGY" ? "🌐 Servidor Synology NAS (Acceso Externo)" : "💻 Disco Local del Servidor (uploads/expedientes)")
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="small text-muted fw-bold">Cambiar modo:</span>
+                            <RadzenButton Text="Modo Local" Icon="folder" Size="ButtonSize.Small" 
+                                          ButtonStyle="@(configuracionesSistema.FirstOrDefault(c => c.Llave == "TipoAlmacenamiento")?.Valor == "LOCAL" ? ButtonStyle.Primary : ButtonStyle.Light)"
+                                          Click="@(() => CambiarModoAlmacenamientoRapido("LOCAL"))" />
+                            <RadzenButton Text="Modo Synology NAS" Icon="cloud" Size="ButtonSize.Small" 
+                                          ButtonStyle="@(configuracionesSistema.FirstOrDefault(c => c.Llave == "TipoAlmacenamiento")?.Valor == "SYNOLOGY" ? ButtonStyle.Info : ButtonStyle.Light)"
+                                          Click="@(() => CambiarModoAlmacenamientoRapido("SYNOLOGY"))" />
+                        </div>
+                    </div>
+                </div>
+
+                @if (editandoConfiguracion != null)
+                {
+                    <RadzenCard Class="mb-3 p-3 bg-light border border-primary">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <strong class="text-primary">@(editandoConfiguracion.IdConfiguracion == 0 ? "Crear Nueva Llave de Configuración" : $"Editar Configuración: {editandoConfiguracion.Llave}")</strong>
+                            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => editandoConfiguracion = null)" />
+                        </div>
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Llave / Clave Identificadora" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoConfiguracion.Llave" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Categoría" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoConfiguracion.Categoria" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <div class="d-flex align-items-center h-100 pt-2">
+                                    <RadzenCheckBox @bind-Value="editandoConfiguracion.EsSensible" Name="chkSensible" />
+                                    <RadzenLabel Text="Dato Sensible / Contraseña (Ocultar valor)" Component="chkSensible" Class="ms-2 small text-muted" />
+                                </div>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="12">
+                                <RadzenFormField Text="Valor Asignado a la Llave" Class="w-100">
+                                    @if (editandoConfiguracion.EsSensible && !mostrarClaveSynology)
+                                    {
+                                        <RadzenPassword @bind-Value="editandoConfiguracion.Valor" Class="w-100" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenTextBox @bind-Value="editandoConfiguracion.Valor" Class="w-100" />
+                                    }
+                                </RadzenFormField>
+                                @if (editandoConfiguracion.EsSensible)
+                                {
+                                    <button type="button" class="btn btn-link btn-sm p-0 mt-1 text-decoration-none" @onclick="@(() => mostrarClaveSynology = !mostrarClaveSynology)">
+                                        <RadzenIcon Icon="@(mostrarClaveSynology ? "visibility_off" : "visibility")" Style="font-size: 0.85rem;" />
+                                        <span>@(mostrarClaveSynology ? "Ocultar Contraseña" : "Ver Contraseña")</span>
+                                    </button>
+                                }
+                            </RadzenColumn>
+                            <RadzenColumn Size="12">
+                                <RadzenFormField Text="Descripción o Propósito del Parámetro" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoConfiguracion.Descripcion" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" Class="text-end">
+                                <RadzenButton Icon="save" Text="Guardar Configuración" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@GuardarConfiguracion" Class="me-2" />
+                                <RadzenButton Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => editandoConfiguracion = null)" />
+                            </RadzenColumn>
+                        </RadzenRow>
+                    </RadzenCard>
+                }
+
+                <div class="table-responsive w-100">
+                    <RadzenDataGrid Data="@configuracionesSistema" TItem="Configuracion" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10"
+                                    FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="Configuracion" Property="Llave" Title="Llave / Parámetro" Width="220px">
+                                <Template Context="c">
+                                    <strong class="font-monospace text-primary">@c.Llave</strong>
+                                    <div class="small text-muted">@c.Descripcion</div>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="Configuracion" Property="Valor" Title="Valor Configurado" Width="280px">
+                                <Template Context="c">
+                                    @if (c.EsSensible)
+                                    {
+                                        <span class="badge bg-light text-dark border font-monospace">••••••••••••</span>
+                                    }
+                                    else
+                                    {
+                                        <code class="text-dark bg-light px-2 py-1 rounded">@c.Valor</code>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="Configuracion" Property="Categoria" Title="Categoría" Width="130px">
+                                <Template Context="c">
+                                    <span class="badge bg-secondary-subtle text-secondary border">@c.Categoria</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="Configuracion" Property="ActualizadoEn" Title="Última Actualización" Width="150px">
+                                <Template Context="c">
+                                    <small class="text-muted">@c.ActualizadoEn.ToString("dd/MM/yyyy HH:mm")</small>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="Configuracion" Title="Acciones" Width="90px" TextAlign="TextAlign.Center">
+                                <Template Context="c">
+                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarConfiguracion(c))" title="Editar Llave" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+            </RadzenCard>
+        }
     }
 </div>
 
@@ -931,6 +1076,7 @@
         new("feriados-nacionales", "Feriados y Asuetos Nacionales (Art. 42 LPA)", "calendar_month", "Calendario de días inhábiles para el cómputo automático de plazos fatales"),
         new("parametros-fiscales", "Parámetros Fiscales y Tasas Oficiales (SAR / DIGEPIH)", "account_balance", "Tasas de cambio BCH, ISV 15%, timbres CAH (L 50), tasas DIGEPIH y CAI"),
         new("tarifas-arancelarias", "Tarifas de Honorarios y Aranceles por Etapa", "price_change", "Aranceles en HNL y USD por tipo de trámite (búsqueda, presentación, litigios)"),
+        new("configuraciones-sistema", "Parámetros del Sistema y Almacenamiento (Synology NAS)", "dns", "Configuración de rutas de almacenamiento, Synology NAS y llaves globales sin código en duro"),
         new("clientes", "Clientes y Titulares de Marcas", "people", "Administración del padrón de personas naturales y jurídicas con RTN")
     };
 
@@ -943,10 +1089,13 @@
     private List<FeriadoNacional> feriadosNacionales = new();
     private List<ParametroFiscal> parametrosFiscales = new();
     private List<TarifaArancelaria> tarifasArancelarias = new();
+    private List<Configuracion> configuracionesSistema = new();
 
     // Modelos para edición/creación
     private TipoSigno? editandoTipoSigno;
     private EstadoProcesal? editandoEstado;
+    private Configuracion? editandoConfiguracion;
+    private bool mostrarClaveSynology = false;
     private TipoActuacion? editandoActuacion;
     private ViaPresentacion? editandoVia;
     private UbicacionArchivo? editandoUbicacion;
@@ -995,6 +1144,7 @@
         feriadosNacionales = await PlazosService.ObtenerFeriadosAsync();
         parametrosFiscales = await FacturacionService.GetParametrosFiscalesAsync();
         tarifasArancelarias = await FacturacionService.GetTarifasAsync(soloActivas: false);
+        configuracionesSistema = await ConfiguracionService.GetConfiguracionesAsync();
         cargando = false;
     }
 
@@ -1394,5 +1544,56 @@
             "secondary" => BadgeStyle.Secondary,
             _ => BadgeStyle.Primary
         };
+    }
+
+    // -------------------------------------------------------------
+    // GESTIÓN DE CONFIGURACIONES DEL SISTEMA Y SYNOLOGY NAS
+    // -------------------------------------------------------------
+    private void AbrirNuevaConfiguracion()
+    {
+        editandoConfiguracion = new Configuracion
+        {
+            Categoria = "Almacenamiento",
+            EsSensible = false
+        };
+        mostrarClaveSynology = false;
+    }
+
+    private void EditarConfiguracion(Configuracion item)
+    {
+        editandoConfiguracion = new Configuracion
+        {
+            IdConfiguracion = item.IdConfiguracion,
+            Llave = item.Llave,
+            Valor = item.Valor,
+            Descripcion = item.Descripcion,
+            Categoria = item.Categoria,
+            EsSensible = item.EsSensible
+        };
+        mostrarClaveSynology = false;
+    }
+
+    private async Task GuardarConfiguracion()
+    {
+        if (editandoConfiguracion == null) return;
+        if (string.IsNullOrWhiteSpace(editandoConfiguracion.Llave))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Atención", "La llave de configuración es obligatoria.");
+            return;
+        }
+
+        await ConfiguracionService.GuardarConfiguracionAsync(editandoConfiguracion);
+        NotificationService.Notify(NotificationSeverity.Success, "Configuración Guardada", 
+            $"Parámetro {editandoConfiguracion.Llave} actualizado correctamente.");
+        editandoConfiguracion = null;
+        await CargarCatalogos();
+    }
+
+    private async Task CambiarModoAlmacenamientoRapido(string nuevoModo)
+    {
+        await ConfiguracionService.ActualizarValorAsync("TipoAlmacenamiento", nuevoModo);
+        NotificationService.Notify(NotificationSeverity.Info, "Modo de Almacenamiento Actualizado", 
+            $"El repositorio de documentos ahora guardará en modo: {nuevoModo}");
+        await CargarCatalogos();
     }
 }

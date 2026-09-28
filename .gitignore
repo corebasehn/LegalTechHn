@@ -23,3 +23,7 @@ Thumbs.db
 ## Publish / Deployment outputs
 publish/
 [Pp]ublish/
+
+## User Uploads
+**/wwwroot/uploads/**
+!**/wwwroot/uploads/.gitkeep

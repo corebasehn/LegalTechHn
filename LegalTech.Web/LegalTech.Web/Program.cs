@@ -33,6 +33,8 @@ builder.Services.AddScoped<PlazosService>();
 builder.Services.AddScoped<ClienteService>();
 builder.Services.AddScoped<LitigioService>();
 builder.Services.AddScoped<FacturacionService>();
+builder.Services.AddScoped<ConfiguracionService>();
+builder.Services.AddScoped<DocumentoService>();
 
 var app = builder.Build();
 
@@ -150,6 +152,40 @@ using (var scope = app.Services.CreateScope())
             ""TotalLinea"" TEXT NOT NULL,
             CONSTRAINT ""FK_DetallesFactura_Facturas_FacturaId"" FOREIGN KEY (""FacturaId"") REFERENCES ""Facturas"" (""Id"") ON DELETE CASCADE,
             CONSTRAINT ""FK_DetallesFactura_TarifasArancelarias_TarifaArancelariaId"" FOREIGN KEY (""TarifaArancelariaId"") REFERENCES ""TarifasArancelarias"" (""Id"") ON DELETE SET NULL
+        );
+    ");
+
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS ""Configuraciones"" (
+            ""IdConfiguracion"" INTEGER NOT NULL CONSTRAINT ""PK_Configuraciones"" PRIMARY KEY AUTOINCREMENT,
+            ""Llave"" TEXT NOT NULL,
+            ""Valor"" TEXT NOT NULL,
+            ""Descripcion"" TEXT NULL,
+            ""Categoria"" TEXT NULL,
+            ""EsSensible"" INTEGER NOT NULL,
+            ""ActualizadoEn"" TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Configuraciones_Llave"" ON ""Configuraciones"" (""Llave"");
+    ");
+
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS ""DocumentosExpediente"" (
+            ""Id"" TEXT NOT NULL CONSTRAINT ""PK_DocumentosExpediente"" PRIMARY KEY,
+            ""ExpedienteId"" TEXT NOT NULL,
+            ""Categoria"" TEXT NOT NULL,
+            ""TipoDocumento"" TEXT NOT NULL,
+            ""NombreOriginal"" TEXT NOT NULL,
+            ""RutaAlmacenamiento"" TEXT NOT NULL,
+            ""Extension"" TEXT NOT NULL,
+            ""TipoMime"" TEXT NOT NULL,
+            ""TamanoBytes"" INTEGER NOT NULL,
+            ""Observaciones"" TEXT NULL,
+            ""ProveedorAlmacenamiento"" TEXT NOT NULL,
+            ""CustodiaFisicaVerificada"" INTEGER NOT NULL,
+            ""UbicacionFisica"" TEXT NULL,
+            ""FechaSubida"" TEXT NOT NULL,
+            ""SubidoPor"" TEXT NOT NULL,
+            CONSTRAINT ""FK_DocumentosExpediente_Expedientes_ExpedienteId"" FOREIGN KEY (""ExpedienteId"") REFERENCES ""Expedientes"" (""Id"") ON DELETE CASCADE
         );
     ");
 
@@ -303,6 +339,10 @@ using (var scope = app.Services.CreateScope())
         }
         db.SaveChanges();
     }
+
+    // Inicializar llaves base de configuración (RutaLocal, Synology, etc.)
+    var configService = scope.ServiceProvider.GetRequiredService<ConfiguracionService>();
+    configService.InicializarConfiguracionesBaseAsync(db).GetAwaiter().GetResult();
 }
 
 // Configure the HTTP request pipeline.

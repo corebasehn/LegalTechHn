@@ -30,6 +30,8 @@ public class LegalTechDbContext : DbContext
     public DbSet<TarifaArancelaria> TarifasArancelarias => Set<TarifaArancelaria>();
     public DbSet<FacturaCobro> Facturas => Set<FacturaCobro>();
     public DbSet<DetalleFacturaCobro> DetallesFactura => Set<DetalleFacturaCobro>();
+    public DbSet<Configuracion> Configuraciones => Set<Configuracion>();
+    public DbSet<DocumentoExpediente> DocumentosExpediente => Set<DocumentoExpediente>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -388,6 +390,89 @@ public class LegalTechDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(d => d.TarifaArancelariaId)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Tabla de Configuraciones del Sistema (Llave-Valor)
+        modelBuilder.Entity<Configuracion>(entity =>
+        {
+            entity.HasKey(c => c.IdConfiguracion);
+            entity.Property(c => c.Llave).IsRequired().HasMaxLength(100);
+            entity.HasIndex(c => c.Llave).IsUnique();
+            entity.Property(c => c.Valor).IsRequired();
+            entity.Property(c => c.Categoria).HasMaxLength(50);
+            entity.Property(c => c.Descripcion).HasMaxLength(250);
+
+            entity.HasData(
+                new Configuracion
+                {
+                    IdConfiguracion = 1,
+                    Llave = "RutaLocal",
+                    Valor = "uploads/expedientes",
+                    Categoria = "Almacenamiento",
+                    Descripcion = "Ruta relativa local en el servidor para almacenar los documentos de los expedientes",
+                    EsSensible = false,
+                    ActualizadoEn = new DateTime(2026, 9, 27, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new Configuracion
+                {
+                    IdConfiguracion = 2,
+                    Llave = "TipoAlmacenamiento",
+                    Valor = "LOCAL",
+                    Categoria = "Almacenamiento",
+                    Descripcion = "Proveedor de almacenamiento activo: 'LOCAL' (servidor) o 'SYNOLOGY' (NAS externo)",
+                    EsSensible = false,
+                    ActualizadoEn = new DateTime(2026, 9, 27, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new Configuracion
+                {
+                    IdConfiguracion = 3,
+                    Llave = "RutaSynology",
+                    Valor = "https://nas.legaltech.hn/marcas",
+                    Categoria = "Almacenamiento",
+                    Descripcion = "Ruta de red compartida (UNC) o URL externa del servidor Synology NAS",
+                    EsSensible = false,
+                    ActualizadoEn = new DateTime(2026, 9, 27, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new Configuracion
+                {
+                    IdConfiguracion = 4,
+                    Llave = "UsuarioSynology",
+                    Valor = "admin_marcas",
+                    Categoria = "Almacenamiento",
+                    Descripcion = "Usuario con permisos de lectura y escritura en el Synology NAS",
+                    EsSensible = false,
+                    ActualizadoEn = new DateTime(2026, 9, 27, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new Configuracion
+                {
+                    IdConfiguracion = 5,
+                    Llave = "ClaveSynology",
+                    Valor = "",
+                    Categoria = "Almacenamiento",
+                    Descripcion = "Contraseña o token de aplicación para autenticación en el Synology NAS",
+                    EsSensible = true,
+                    ActualizadoEn = new DateTime(2026, 9, 27, 0, 0, 0, DateTimeKind.Utc)
+                }
+            );
+        });
+
+        // Repositorio Documental de Expedientes (MOD-06)
+        modelBuilder.Entity<DocumentoExpediente>(entity =>
+        {
+            entity.HasKey(d => d.Id);
+            entity.Property(d => d.TipoDocumento).IsRequired().HasMaxLength(150);
+            entity.Property(d => d.NombreOriginal).IsRequired().HasMaxLength(250);
+            entity.Property(d => d.RutaAlmacenamiento).IsRequired().HasMaxLength(500);
+            entity.Property(d => d.Extension).HasMaxLength(20);
+            entity.Property(d => d.TipoMime).HasMaxLength(100);
+            entity.Property(d => d.Categoria).HasMaxLength(50);
+            entity.Property(d => d.ProveedorAlmacenamiento).HasMaxLength(30);
+            entity.Property(d => d.UbicacionFisica).HasMaxLength(200);
+
+            entity.HasOne(d => d.Expediente)
+                  .WithMany(e => e.Documentos)
+                  .HasForeignKey(d => d.ExpedienteId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

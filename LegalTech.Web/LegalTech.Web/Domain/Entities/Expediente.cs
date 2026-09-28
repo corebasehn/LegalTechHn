@@ -64,6 +64,7 @@ public class Expediente
     public ICollection<PublicacionENAG> Publicaciones { get; set; } = new List<PublicacionENAG>();
     public ICollection<Litigio> Litigios { get; set; } = new List<Litigio>();
     public ICollection<PlazoLegal> PlazosLegales { get; set; } = new List<PlazoLegal>();
+    public ICollection<DocumentoExpediente> Documentos { get; set; } = new List<DocumentoExpediente>();
     public CertificadoRegistro? Certificado { get; set; }
 
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;

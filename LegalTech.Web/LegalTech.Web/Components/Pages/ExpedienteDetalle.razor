@@ -9,6 +9,8 @@
 @inject PlazosService PlazosService
 @inject LitigioService LitigioService
 @inject FacturacionService FacturacionService
+@inject DocumentoService DocumentoService
+@inject ConfiguracionService ConfiguracionService
 @inject NotificationService NotificationService
 @inject DialogService DialogService
 @inject NavigationManager NavigationManager
@@ -64,17 +66,29 @@
         <RadzenCard Class="mb-3 p-3 p-md-4 shadow-sm border-0 bg-white">
             <RadzenRow AlignItems="AlignItems.Center" Gap="1rem">
                 <RadzenColumn Size="12" SizeMD="8">
-                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                        <span class="badge bg-dark font-monospace fs-6 px-3 py-2">@expediente.CodigoInterno</span>
-                        <RadzenBadge BadgeStyle="@GetBadgeStyleFromColor(expediente.EstadoProcesal?.ColorBadge)" 
-                                     Text="@(expediente.EstadoProcesal?.Nombre ?? "En Trámite")" 
-                                     Size="BadgeSize.Medium" Class="px-2 py-1" />
-                        <span class="badge bg-secondary-subtle text-secondary border">Fase: @(expediente.EstadoProcesal?.Fase ?? "Apertura")</span>
-                    </div>
+                    <div class="d-flex align-items-center gap-3">
+                        @if (!string.IsNullOrEmpty(expediente.ArchivoEtiquetaJpgUri))
+                        {
+                            <div class="flex-shrink-0">
+                                <img src="@expediente.ArchivoEtiquetaJpgUri" alt="Logo de la marca" 
+                                     class="rounded border p-1 bg-white shadow-xs" 
+                                     style="width: 72px; height: 72px; object-fit: contain;" />
+                            </div>
+                        }
+                        <div>
+                            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                <span class="badge bg-dark font-monospace fs-6 px-3 py-2">@expediente.CodigoInterno</span>
+                                <RadzenBadge BadgeStyle="@GetBadgeStyleFromColor(expediente.EstadoProcesal?.ColorBadge)" 
+                                             Text="@(expediente.EstadoProcesal?.Nombre ?? "En Trámite")" 
+                                             Size="BadgeSize.Medium" Class="px-2 py-1" />
+                                <span class="badge bg-secondary-subtle text-secondary border">Fase: @(expediente.EstadoProcesal?.Fase ?? "Apertura")</span>
+                            </div>
 
-                    <RadzenText TextStyle="TextStyle.H4" TagName="TagName.H1" Class="m-0 text-primary fw-bold text-break">
-                        @expediente.DenominacionMarca
-                    </RadzenText>
+                            <RadzenText TextStyle="TextStyle.H4" TagName="TagName.H1" Class="m-0 text-primary fw-bold text-break">
+                                @expediente.DenominacionMarca
+                            </RadzenText>
+                        </div>
+                    </div>
 
                     <div class="d-flex flex-wrap align-items-center gap-3 mt-2 text-muted small">
                         <div>
@@ -995,8 +1009,292 @@
                         }
                     </div>
                 </RadzenTabsItem>
+
+                <!-- PESTAÑA 7: REPOSITORIO DOCUMENTAL Y CUSTODIA DIGITAL (MOD-06) -->
+                <RadzenTabsItem Text="Documentos y Custodia Digital" Icon="folder_shared">
+                    <div class="p-3">
+                        <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3 border-bottom pb-2">
+                            <div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                                        <RadzenIcon Icon="folder_shared" Class="me-1" /> Repositorio Digital y Custodia de Archivos
+                                    </RadzenText>
+                                    <span class="badge @(proveedorAlmacenamientoActivo == "SYNOLOGY" ? "bg-info text-dark" : "bg-primary text-white") small">
+                                        @(proveedorAlmacenamientoActivo == "SYNOLOGY" ? "🌐 Synology NAS" : "💻 Servidor Local")
+                                    </span>
+                                </div>
+                                <small class="text-muted">
+                                    Custodia digitalizada de logotipos, escritos, autos oficiales, publicaciones de La Gaceta y títulos de concesión.
+                                </small>
+                            </div>
+                            <RadzenButton Icon="@(mostrandoFormSubida ? "expand_less" : "upload_file")" 
+                                          Text="@(mostrandoFormSubida ? "Ocultar Subida" : "Subir Nuevo Documento")" 
+                                          ButtonStyle="@(mostrandoFormSubida ? ButtonStyle.Light : ButtonStyle.Success)" 
+                                          Size="ButtonSize.Small" 
+                                          Click="@(() => mostrandoFormSubida = !mostrandoFormSubida)" />
+                        </div>
+
+                        <!-- PANEL DE CARGA DE ARCHIVOS (DRAG & DROP / SELECTOR) -->
+                        @if (mostrandoFormSubida)
+                        {
+                            <RadzenCard Class="p-3 mb-4 bg-light border border-primary shadow-sm">
+                                <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
+                                    <strong class="text-primary d-flex align-items-center gap-1">
+                                        <RadzenIcon Icon="upload_file" /> Archivar Documento en el Expediente
+                                    </strong>
+                                    <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => mostrandoFormSubida = false)" />
+                                </div>
+
+                                <RadzenRow Gap="1rem">
+                                    <!-- Selector de Archivo Físico -->
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <label class="form-label small fw-bold text-dark">Seleccionar Archivo (PDF, JPG, PNG, DOCX - Máx 25 MB):</label>
+                                        <div class="border border-2 border-dashed rounded p-3 text-center bg-white cursor-pointer hover-bg-light">
+                                            <InputFile OnChange="@AlSeleccionarArchivo" class="form-control" />
+                                            @if (archivoSeleccionado != null)
+                                            {
+                                                <div class="mt-2 text-start p-2 bg-light rounded border">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <RadzenIcon Icon="description" Class="text-primary" />
+                                                        <strong class="text-truncate">@archivoSeleccionado.Name</strong>
+                                                    </div>
+                                                    <small class="text-muted d-block">Tamaño: @FormatTamano(archivoSeleccionado.Size) • Tipo: @archivoSeleccionado.ContentType</small>
+                                                </div>
+                                            }
+                                        </div>
+                                    </RadzenColumn>
+
+                                    <!-- Tipificación y Clasificación -->
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <div class="d-flex flex-column gap-2">
+                                            <RadzenFormField Text="Categoría Documental" Class="w-100">
+                                                <RadzenDropDown @bind-Value="categoriaNueva" Data="@categoriasDocumento" Class="w-100" />
+                                            </RadzenFormField>
+
+                                            <RadzenFormField Text="Tipo de Documento Oficial" Class="w-100">
+                                                <RadzenDropDown @bind-Value="tipoDocumentoNuevo" Data="@tiposDocumentoPredefinidos" 
+                                                                AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Class="w-100" />
+                                            </RadzenFormField>
+                                        </div>
+                                    </RadzenColumn>
+
+                                    <!-- Custodia Física en Archivo Central -->
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <div class="p-2 border rounded bg-white">
+                                            <div class="d-flex align-items-center mb-2">
+                                                <RadzenCheckBox @bind-Value="custodiaFisicaNuevoDoc" Name="chkCustodia" />
+                                                <RadzenLabel Text="¿El documento original en papel reposa en la carpeta física?" Component="chkCustodia" Class="ms-2 fw-bold text-dark small" />
+                                            </div>
+                                            @if (custodiaFisicaNuevoDoc)
+                                            {
+                                                <RadzenFormField Text="Ubicación Física en Bóveda / Archivo" Class="w-100">
+                                                    <RadzenTextBox @bind-Value="ubicacionFisicaNuevoDoc" Placeholder="Ej: Bóveda 1, Gaveta A-2, Carpeta EXP-2026-0001" Class="w-100" />
+                                                </RadzenFormField>
+                                            }
+                                        </div>
+                                    </RadzenColumn>
+
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="Observaciones / Resumen del Documento" Class="w-100">
+                                            <RadzenTextBox @bind-Value="observacionesNuevoDoc" Placeholder="Ej: Sellado por ventanilla DIGEPIH con fecha legal..." Class="w-100" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+
+                                    <RadzenColumn Size="12" Class="text-end">
+                                        @if (subiendoArchivo)
+                                        {
+                                            <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" Class="mb-2" />
+                                            <span class="text-muted small">Transfiriendo y custodiando archivo...</span>
+                                        }
+                                        else
+                                        {
+                                            <RadzenButton Icon="cloud_upload" Text="Subir y Archivar Documento" ButtonStyle="ButtonStyle.Primary" 
+                                                          Size="ButtonSize.Small" Click="@SubirArchivoConfirmado" Disabled="@(archivoSeleccionado == null)" Class="me-2" />
+                                            <RadzenButton Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" 
+                                                          Click="@(() => mostrandoFormSubida = false)" />
+                                        }
+                                    </RadzenColumn>
+                                </RadzenRow>
+                            </RadzenCard>
+                        }
+
+                        <!-- BARRA DE FILTROS POR CATEGORÍA -->
+                        <div class="d-flex flex-wrap gap-1 mb-3">
+                            <button type="button" class="btn btn-sm @(filtroCategoriaDoc == "Todas" ? "btn-primary" : "btn-light border")" 
+                                    @onclick="@(() => FiltrarPorCategoria("Todas"))">
+                                Todos (@documentosExpediente.Count)
+                            </button>
+                            @foreach (var cat in categoriasDocumento)
+                            {
+                                int cantidad = documentosExpediente.Count(d => d.Categoria == cat);
+                                if (cantidad > 0 || filtroCategoriaDoc == cat)
+                                {
+                                    <button type="button" class="btn btn-sm @(filtroCategoriaDoc == cat ? "btn-primary" : "btn-light border")" 
+                                            @onclick="@(() => FiltrarPorCategoria(cat))">
+                                        @cat (@cantidad)
+                                    </button>
+                                }
+                            }
+                        </div>
+
+                        <!-- LISTA / TABLA DE DOCUMENTOS -->
+                        @if (!documentosFiltrados.Any())
+                        {
+                            <div class="text-center p-5 border rounded bg-light text-muted">
+                                <RadzenIcon Icon="folder_open" Style="font-size: 3rem;" Class="text-secondary" />
+                                <h6 class="mt-2 text-dark">No hay documentos en esta categoría</h6>
+                                <p class="small m-0">Utiliza el botón de subida superior para adjuntar archivos oficiales al expediente.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive w-100">
+                                <RadzenDataGrid Data="@documentosFiltrados" TItem="DocumentoExpediente" AllowSorting="true" AllowPaging="true" PageSize="8" Class="w-100">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="DocumentoExpediente" Title="Documento / Tipo" Width="280px">
+                                            <Template Context="d">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <div class="flex-shrink-0">
+                                                        <RadzenIcon Icon="@ObtenerIconoFormato(d.Extension)" Class="@ObtenerClaseColorFormato(d.Extension)" Style="font-size: 1.8rem;" />
+                                                    </div>
+                                                    <div>
+                                                        <strong class="text-dark d-block">@d.TipoDocumento</strong>
+                                                        <span class="text-muted small font-monospace d-block text-truncate" style="max-width: 200px;" title="@d.NombreOriginal">
+                                                            @d.NombreOriginal
+                                                        </span>
+                                                        @if (!string.IsNullOrEmpty(d.Observaciones))
+                                                        {
+                                                            <small class="text-secondary fst-italic">@d.Observaciones</small>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+
+                                        <RadzenDataGridColumn TItem="DocumentoExpediente" Property="Categoria" Title="Categoría" Width="140px">
+                                            <Template Context="d">
+                                                <span class="badge bg-secondary-subtle text-secondary border">@d.Categoria</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+
+                                        <RadzenDataGridColumn TItem="DocumentoExpediente" Title="Tamaño / Fecha" Width="140px">
+                                            <Template Context="d">
+                                                <div>
+                                                    <span class="badge bg-light text-dark border">@FormatTamano(d.TamanoBytes)</span>
+                                                    <small class="text-muted d-block mt-1">@d.FechaSubida.ToString("dd/MM/yyyy HH:mm")</small>
+                                                </div>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+
+                                        <RadzenDataGridColumn TItem="DocumentoExpediente" Title="Custodia Física" Width="200px">
+                                            <Template Context="d">
+                                                @if (d.CustodiaFisicaVerificada)
+                                                {
+                                                    <div class="small">
+                                                        <span class="badge bg-success bg-opacity-10 text-success border border-success d-inline-flex align-items-center gap-1">
+                                                            <RadzenIcon Icon="inventory" Style="font-size: 0.8rem;" /> Original en Carpeta
+                                                        </span>
+                                                        <div class="text-muted mt-1 font-monospace" style="font-size: 0.72rem;">@(d.UbicacionFisica ?? "Archivo Central")</div>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-light text-muted border">
+                                                        ⚪ Solo Copia Digital
+                                                    </span>
+                                                }
+                                            </Template>
+                                        </RadzenDataGridColumn>
+
+                                        <RadzenDataGridColumn TItem="DocumentoExpediente" Title="Destino" Width="100px" TextAlign="TextAlign.Center">
+                                            <Template Context="d">
+                                                <span class="badge @(d.ProveedorAlmacenamiento == "SYNOLOGY" ? "bg-info text-dark" : "bg-light text-dark border")" style="font-size: 0.7rem;">
+                                                    @(d.ProveedorAlmacenamiento == "SYNOLOGY" ? "NAS" : "LOCAL")
+                                                </span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+
+                                        <RadzenDataGridColumn TItem="DocumentoExpediente" Title="Acciones" Width="140px" TextAlign="TextAlign.Center">
+                                            <Template Context="d">
+                                                <div class="d-flex justify-content-center gap-1">
+                                                    <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
+                                                                  Click="@(() => AbrirVisorDocumento(d))" title="Visualizar documento" />
+                                                    <a href="@d.RutaAlmacenamiento" target="_blank" download="@d.NombreOriginal" 
+                                                       class="rz-button rz-button-xs rz-variant-flat rz-light text-decoration-none d-inline-flex align-items-center" title="Descargar original">
+                                                        <RadzenIcon Icon="download" Style="font-size: 0.85rem;" />
+                                                    </a>
+                                                    <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.ExtraSmall" 
+                                                                  Click="@(() => ConfirmarEliminarDocumento(d))" title="Eliminar documento" />
+                                                </div>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        }
+                    </div>
+                </RadzenTabsItem>
             </Tabs>
         </RadzenTabs>
+
+        <!-- MODAL DE VISUALIZACIÓN DE DOCUMENTOS (PDF & IMÁGENES) -->
+        @if (mostrandoModalVisor && documentoSeleccionadoVisor != null)
+        {
+            <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 1060;">
+                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" style="max-height: 95vh;">
+                    <div class="modal-content shadow-lg border-0">
+                        <div class="modal-header bg-dark text-white d-flex align-items-center justify-content-between p-2 px-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <RadzenIcon Icon="@ObtenerIconoFormato(documentoSeleccionadoVisor.Extension)" Class="text-white fs-5" />
+                                <div>
+                                    <strong class="modal-title fs-6">@documentoSeleccionadoVisor.TipoDocumento</strong>
+                                    <small class="text-white-50 d-block" style="font-size: 0.72rem;">@documentoSeleccionadoVisor.NombreOriginal • @FormatTamano(documentoSeleccionadoVisor.TamanoBytes)</small>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <a href="@documentoSeleccionadoVisor.RutaAlmacenamiento" target="_blank" download="@documentoSeleccionadoVisor.NombreOriginal" 
+                                   class="btn btn-sm btn-outline-light d-flex align-items-center gap-1">
+                                    <RadzenIcon Icon="download" Style="font-size: 0.9rem;" />
+                                    <span>Descargar</span>
+                                </a>
+                                <button type="button" class="btn-close btn-close-white" @onclick="@(() => mostrandoModalVisor = false)"></button>
+                            </div>
+                        </div>
+                        <div class="modal-body p-0 bg-secondary bg-opacity-10 d-flex justify-content-center align-items-center" style="min-height: 500px;">
+                            @if (documentoSeleccionadoVisor.Extension == ".pdf")
+                            {
+                                <iframe src="@documentoSeleccionadoVisor.RutaAlmacenamiento" style="width: 100%; height: 78vh; border: none;"></iframe>
+                            }
+                            else if (documentoSeleccionadoVisor.Extension == ".jpg" || documentoSeleccionadoVisor.Extension == ".jpeg" || documentoSeleccionadoVisor.Extension == ".png" || documentoSeleccionadoVisor.Extension == ".webp")
+                            {
+                                <div class="p-3 text-center w-100">
+                                    <img src="@documentoSeleccionadoVisor.RutaAlmacenamiento" alt="@documentoSeleccionadoVisor.NombreOriginal" 
+                                         class="img-fluid rounded shadow-sm border bg-white" style="max-height: 75vh; object-fit: contain;" />
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="p-5 text-center bg-white rounded shadow-sm">
+                                    <RadzenIcon Icon="description" Class="text-primary fs-1 mb-2" />
+                                    <h5 class="fw-bold">Vista previa no disponible para este tipo de archivo</h5>
+                                    <p class="text-muted">El archivo @documentoSeleccionadoVisor.Extension puede descargarse directamente.</p>
+                                    <a href="@documentoSeleccionadoVisor.RutaAlmacenamiento" target="_blank" download="@documentoSeleccionadoVisor.NombreOriginal" class="btn btn-primary">
+                                        Descargar Archivo
+                                    </a>
+                                </div>
+                            }
+                        </div>
+                        <div class="modal-footer bg-light p-2 justify-content-between">
+                            <span class="small text-muted">
+                                Subido por <b>@documentoSeleccionadoVisor.SubidoPor</b> el @documentoSeleccionadoVisor.FechaSubida.ToString("dd/MM/yyyy HH:mm") 
+                                (Almacenado en: <b>@documentoSeleccionadoVisor.ProveedorAlmacenamiento</b>)
+                            </span>
+                            <RadzenButton Text="Cerrar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => mostrandoModalVisor = false)" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
     }
 </div>
 
@@ -1042,6 +1340,52 @@
     private DateTime fechaNotificacionNuevo = DateTime.Today;
     private DateTime fechaFatalProyectada = DateTime.Today;
     private string? observacionesPlazoNuevo;
+
+    // Repositorio Documental y Custodia Digital (MOD-06)
+    private List<DocumentoExpediente> documentosExpediente = new();
+    private List<DocumentoExpediente> documentosFiltrados = new();
+    private string filtroCategoriaDoc = "Todas";
+    private bool mostrandoFormSubida = false;
+    private IBrowserFile? archivoSeleccionado;
+    private string categoriaNueva = "Solicitud";
+    private string tipoDocumentoNuevo = "Logotipo / Etiqueta del Signo";
+    private string? observacionesNuevoDoc;
+    private bool custodiaFisicaNuevoDoc = false;
+    private string? ubicacionFisicaNuevoDoc;
+    private bool subiendoArchivo = false;
+    private string proveedorAlmacenamientoActivo = "LOCAL";
+    private bool mostrandoModalVisor = false;
+    private DocumentoExpediente? documentoSeleccionadoVisor;
+
+    private readonly List<string> categoriasDocumento = new()
+    {
+        "Solicitud", "Poderes", "Tasas y Timbres", "La Gaceta (ENAG)", "Resoluciones y Autos", "Litigios", "Título y Concesión", "Otros"
+    };
+
+    private readonly List<string> tiposDocumentoPredefinidos = new()
+    {
+        "Logotipo / Etiqueta del Signo",
+        "Carátula Sellada DIGEPIH (Comprobante de Presentación)",
+        "Escrito Oficial de Solicitud Inicial",
+        "Poder de Representación Legal / Mandato",
+        "Escritura Pública de Constitución / Reformas",
+        "Recibo de Tasa Oficial de Presentación (IP)",
+        "Comprobante de Timbre CAH (L. 50.00)",
+        "Aviso 1 Publicado en La Gaceta (ENAG)",
+        "Aviso 2 Publicado en La Gaceta (ENAG)",
+        "Aviso 3 Publicado en La Gaceta (ENAG)",
+        "Constancia de Entrega de los 3 Ejemplares en DIGEPIH",
+        "Auto de Prevención de Forma (DIGEPIH)",
+        "Escrito de Subsanación de Forma",
+        "Auto de Objeción de Fondo / Denegatoria Preliminar",
+        "Escrito de Contestación de Fondo",
+        "Demanda de Oposición de Terceros",
+        "Escrito de Defensa ante Oposición",
+        "Resolución Final de Concesión",
+        "Certificado Oficial de Registro de Marca (Título)",
+        "Acuse de Recibo / Entrega de Título al Cliente (P360)",
+        "Otro Documento"
+    };
 
     // Modal de evacuación de plazo
     private PlazoLegal? plazoAEvacuar;
@@ -1111,6 +1455,11 @@
             esSolventeP360 = solvencia.EsSolvente;
             saldoPendienteExpediente = solvencia.SaldoPendienteTotal;
             facturasExpediente = await FacturacionService.GetFacturasPorExpedienteAsync(Id);
+
+            // Cargar repositorio de documentos (MOD-06)
+            documentosExpediente = await DocumentoService.GetDocumentosPorExpedienteAsync(Id);
+            proveedorAlmacenamientoActivo = await ConfiguracionService.GetValorAsync("TipoAlmacenamiento", "LOCAL");
+            FiltrarDocumentos();
 
             // Inicializar nueva actuación
             ResetNuevaActuacion();
@@ -1400,4 +1749,171 @@
         NotificationService.Notify(NotificationSeverity.Success, "Ejemplares Físicos Entregados", "Se entregaron formalmente los 3 ejemplares físicos ante DIGEPIH. Se neutralizó el riesgo de abandono legal.");
         await CargarExpediente();
     }
+
+    // -------------------------------------------------------------
+    // GESTIÓN DEL REPOSITORIO DOCUMENTAL Y CUSTODIA (MOD-06)
+    // -------------------------------------------------------------
+    private void FiltrarPorCategoria(string cat)
+    {
+        filtroCategoriaDoc = cat;
+        FiltrarDocumentos();
+    }
+
+    private void FiltrarDocumentos()
+    {
+        if (filtroCategoriaDoc == "Todas")
+        {
+            documentosFiltrados = documentosExpediente.OrderByDescending(d => d.FechaSubida).ToList();
+        }
+        else
+        {
+            documentosFiltrados = documentosExpediente
+                .Where(d => d.Categoria.Equals(filtroCategoriaDoc, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(d => d.FechaSubida)
+                .ToList();
+        }
+    }
+
+    private void AlSeleccionarArchivo(InputFileChangeEventArgs e)
+    {
+        archivoSeleccionado = e.File;
+        if (archivoSeleccionado != null)
+        {
+            var ext = Path.GetExtension(archivoSeleccionado.Name).ToLowerInvariant();
+            if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp")
+            {
+                tipoDocumentoNuevo = "Logotipo / Etiqueta del Signo";
+                categoriaNueva = "Solicitud";
+            }
+            else if (ext == ".pdf")
+            {
+                if (archivoSeleccionado.Name.Contains("presentacion", StringComparison.OrdinalIgnoreCase) ||
+                    archivoSeleccionado.Name.Contains("caratula", StringComparison.OrdinalIgnoreCase))
+                {
+                    tipoDocumentoNuevo = "Carátula Sellada DIGEPIH (Comprobante de Presentación)";
+                    categoriaNueva = "Solicitud";
+                }
+                else if (archivoSeleccionado.Name.Contains("poder", StringComparison.OrdinalIgnoreCase))
+                {
+                    tipoDocumentoNuevo = "Poder de Representación Legal / Mandato";
+                    categoriaNueva = "Poderes";
+                }
+                else if (archivoSeleccionado.Name.Contains("gaceta", StringComparison.OrdinalIgnoreCase) ||
+                         archivoSeleccionado.Name.Contains("aviso", StringComparison.OrdinalIgnoreCase))
+                {
+                    tipoDocumentoNuevo = "Aviso 1 Publicado en La Gaceta (ENAG)";
+                    categoriaNueva = "La Gaceta (ENAG)";
+                }
+                else if (archivoSeleccionado.Name.Contains("titulo", StringComparison.OrdinalIgnoreCase) ||
+                         archivoSeleccionado.Name.Contains("certificado", StringComparison.OrdinalIgnoreCase))
+                {
+                    tipoDocumentoNuevo = "Certificado Oficial de Registro de Marca (Título)";
+                    categoriaNueva = "Título y Concesión";
+                }
+            }
+        }
+    }
+
+    private async Task SubirArchivoConfirmado()
+    {
+        if (expediente == null || archivoSeleccionado == null) return;
+
+        try
+        {
+            subiendoArchivo = true;
+            using var stream = archivoSeleccionado.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024); // 25 MB
+
+            var doc = await DocumentoService.SubirYGuardarDocumentoAsync(
+                expedienteId: expediente.Id,
+                archivoStream: stream,
+                nombreOriginal: archivoSeleccionado.Name,
+                tipoMime: archivoSeleccionado.ContentType,
+                tamanoBytes: archivoSeleccionado.Size,
+                categoria: categoriaNueva,
+                tipoDocumento: tipoDocumentoNuevo,
+                observaciones: observacionesNuevoDoc,
+                custodiaFisicaVerificada: custodiaFisicaNuevoDoc,
+                ubicacionFisica: custodiaFisicaNuevoDoc ? (ubicacionFisicaNuevoDoc ?? "Archivo Central") : null,
+                subidoPor: expediente.AbogadoResponsable ?? "Usuario Actual"
+            );
+
+            NotificationService.Notify(NotificationSeverity.Success, "Documento Archivado", $"Se ha archivado '{doc.NombreOriginal}' exitosamente.");
+
+            archivoSeleccionado = null;
+            observacionesNuevoDoc = null;
+            custodiaFisicaNuevoDoc = false;
+            ubicacionFisicaNuevoDoc = null;
+            mostrandoFormSubida = false;
+
+            await CargarExpediente();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error al subir", ex.Message);
+        }
+        finally
+        {
+            subiendoArchivo = false;
+        }
+    }
+
+    private void AbrirVisorDocumento(DocumentoExpediente d)
+    {
+        documentoSeleccionadoVisor = d;
+        mostrandoModalVisor = true;
+    }
+
+    private async Task ConfirmarEliminarDocumento(DocumentoExpediente d)
+    {
+        var confirm = await DialogService.Confirm(
+            $"¿Está seguro de eliminar permanentemente el documento '{d.NombreOriginal}' del expediente y del disco?",
+            "Confirmar Eliminación",
+            new ConfirmOptions { OkButtonText = "Sí, Eliminar", CancelButtonText = "Cancelar" });
+
+        if (confirm == true)
+        {
+            var ok = await DocumentoService.EliminarDocumentoAsync(d.Id);
+            if (ok)
+            {
+                NotificationService.Notify(NotificationSeverity.Success, "Eliminado", "Documento eliminado correctamente.");
+                await CargarExpediente();
+            }
+            else
+            {
+                NotificationService.Notify(NotificationSeverity.Error, "Error", "No se pudo eliminar el documento.");
+            }
+        }
+    }
+
+    private string FormatTamano(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F2} MB";
+    }
+
+    private string ObtenerIconoFormato(string extension)
+    {
+        return extension.ToLowerInvariant() switch
+        {
+            ".pdf" => "picture_as_pdf",
+            ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif" => "image",
+            ".doc" or ".docx" => "article",
+            ".xls" or ".xlsx" => "table_view",
+            _ => "insert_drive_file"
+        };
+    }
+
+    private string ObtenerClaseColorFormato(string extension)
+    {
+        return extension.ToLowerInvariant() switch
+        {
+            ".pdf" => "text-danger",
+            ".jpg" or ".jpeg" or ".png" or ".webp" => "text-primary",
+            ".doc" or ".docx" => "text-info",
+            ".xls" or ".xlsx" => "text-success",
+            _ => "text-secondary"
+        };
+    }
 }
+
