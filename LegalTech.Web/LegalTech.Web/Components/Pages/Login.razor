@@ -1,0 +1,139 @@
+@page "/login"
+@layout LegalTech.Web.Components.Layout.EmptyLayout
+@inject NavigationManager NavigationManager
+
+<PageTitle>Iniciar Sesión - LegalTech Honduras</PageTitle>
+
+<div class="min-vh-100 d-flex align-items-center justify-content-center p-3" style="background: linear-gradient(135deg, #0b1f3a 0%, #1e3c72 50%, #2a5298 100%);">
+    <div class="card shadow-lg border-0 rounded-4 overflow-hidden" style="max-width: 480px; width: 100%; backdrop-filter: blur(10px); background: rgba(255, 255, 255, 0.98);">
+        <!-- Encabezado Corporativo -->
+        <div class="p-4 text-center border-bottom bg-light">
+            <div class="d-inline-flex p-3 rounded-circle bg-primary bg-opacity-10 text-primary mb-2 shadow-sm">
+                <RadzenIcon Icon="gavel" Style="font-size: 2.8rem;" />
+            </div>
+            <h4 class="fw-bold text-dark m-0">LegalTech Honduras</h4>
+            <span class="text-muted small">Sistema Integral de Propiedad Intelectual y Marcas</span>
+        </div>
+
+        <!-- Formulario de Acceso Seguro -->
+        <div class="p-4">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <RadzenIcon Icon="lock" Class="text-warning" />
+                <h6 class="fw-bold text-dark m-0">Acceso Seguro al Despacho</h6>
+            </div>
+
+            @if (!string.IsNullOrEmpty(Error))
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Class="mb-3 small py-2" AllowClose="false">
+                    <div class="d-flex align-items-center gap-2">
+                        <RadzenIcon Icon="warning" />
+                        <div>@Uri.UnescapeDataString(Error)</div>
+                    </div>
+                </RadzenAlert>
+            }
+
+            <form method="post" action="/account/login@(string.IsNullOrEmpty(ReturnUrl) ? "" : $"?returnUrl={Uri.EscapeDataString(ReturnUrl)}")" id="formLogin">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-dark">Correo Electrónico o Usuario:</label>
+                    <input type="text" name="identificador" id="txtIdentificador" class="form-control shadow-sm" style="height: 42px;" placeholder="ej: admin@legaltech.hn" required />
+                </div>
+
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label small fw-bold text-dark m-0">Contraseña:</label>
+                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none small text-muted" onclick="togglePassVisibility()">
+                            <span id="btnTogglePassText">Mostrar</span>
+                        </button>
+                    </div>
+                    <input type="password" name="password" id="txtPassword" class="form-control shadow-sm" style="height: 42px;" placeholder="••••••••••••" required />
+                </div>
+
+                <div class="d-grid gap-2 mt-4">
+                    <button type="submit" class="btn btn-primary d-flex align-items-center justify-content-center gap-2 shadow-sm fw-bold" style="height: 44px;">
+                        <RadzenIcon Icon="login" />
+                        <span>Ingresar al Sistema</span>
+                    </button>
+                </div>
+            </form>
+
+            <!-- Acceso Rápido de Demostración para Pruebas de Roles -->
+            <div class="mt-4 pt-3 border-top">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <small class="text-muted fw-bold">Perfiles para Evaluación Rápida:</small>
+                    <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.65rem;">DEMO</span>
+                </div>
+                <div class="d-grid gap-1">
+                    <button type="button" class="btn btn-outline-warning btn-sm text-start text-dark d-flex align-items-center justify-content-between py-1 px-2"
+                            onclick="cargarDemo('admin@legaltech.hn', 'Admin2026!')">
+                        <div class="d-flex align-items-center gap-1">
+                            <RadzenIcon Icon="shield" Class="text-warning" Style="font-size: 0.9rem;" />
+                            <strong style="font-size: 0.78rem;">Socio Director (Admin)</strong>
+                        </div>
+                        <code class="small text-muted" style="font-size: 0.7rem;">admin@legaltech.hn</code>
+                    </button>
+
+                    <button type="button" class="btn btn-outline-primary btn-sm text-start text-dark d-flex align-items-center justify-content-between py-1 px-2"
+                            onclick="cargarDemo('abogado@legaltech.hn', 'Abogado2026!')">
+                        <div class="d-flex align-items-center gap-1">
+                            <RadzenIcon Icon="gavel" Class="text-primary" Style="font-size: 0.9rem;" />
+                            <strong style="font-size: 0.78rem;">Abogado Senior</strong>
+                        </div>
+                        <code class="small text-muted" style="font-size: 0.7rem;">abogado@legaltech.hn</code>
+                    </button>
+
+                    <button type="button" class="btn btn-outline-info btn-sm text-start text-dark d-flex align-items-center justify-content-between py-1 px-2"
+                            onclick="cargarDemo('paralegal@legaltech.hn', 'Paralegal2026!')">
+                        <div class="d-flex align-items-center gap-1">
+                            <RadzenIcon Icon="assignment_ind" Class="text-info" Style="font-size: 0.9rem;" />
+                            <strong style="font-size: 0.78rem;">Paralegal / Procurador</strong>
+                        </div>
+                        <code class="small text-muted" style="font-size: 0.7rem;">paralegal@legaltech.hn</code>
+                    </button>
+
+                    <button type="button" class="btn btn-outline-success btn-sm text-start text-dark d-flex align-items-center justify-content-between py-1 px-2"
+                            onclick="cargarDemo('finanzas@legaltech.hn', 'Finanzas2026!')">
+                        <div class="d-flex align-items-center gap-1">
+                            <RadzenIcon Icon="account_balance_wallet" Class="text-success" Style="font-size: 0.9rem;" />
+                            <strong style="font-size: 0.78rem;">Finanzas y Facturación</strong>
+                        </div>
+                        <code class="small text-muted" style="font-size: 0.7rem;">finanzas@legaltech.hn</code>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-light p-3 text-center border-top">
+            <small class="text-muted" style="font-size: 0.75rem;">
+                Protegido por Criptografía PBKDF2 &bull; Sistema de Trazabilidad y Confidencialidad Legal
+            </small>
+        </div>
+    </div>
+</div>
+
+<script>
+    function togglePassVisibility() {
+        const pass = document.getElementById('txtPassword');
+        const text = document.getElementById('btnTogglePassText');
+        if (pass.type === 'password') {
+            pass.type = 'text';
+            text.innerText = 'Ocultar';
+        } else {
+            pass.type = 'password';
+            text.innerText = 'Mostrar';
+        }
+    }
+
+    function cargarDemo(usuario, clave) {
+        document.getElementById('txtIdentificador').value = usuario;
+        document.getElementById('txtPassword').value = clave;
+        document.getElementById('formLogin').submit();
+    }
+</script>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Error { get; set; }
+}

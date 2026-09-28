@@ -1,56 +1,82 @@
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand d-flex align-items-center" href="">
-            <RadzenIcon Icon="gavel" Class="me-2 text-warning" Style="font-size: 1.4rem;" />
-            <span>LegalTech Honduras</span>
+@using LegalTech.Web.Domain.Entities
+
+<div class="navmenu-container @(Colapsado ? "colapsado" : "")">
+    <div class="top-row navbar navbar-dark px-3 d-flex align-items-center">
+        <a class="navbar-brand d-flex align-items-center m-0 text-decoration-none" href="" @onclick="HandleItemClick" title="LegalTech Honduras">
+            <RadzenIcon Icon="gavel" Class="text-warning brand-icon" Style="font-size: 1.4rem;" />
+            <span class="brand-text ms-2 fw-bold text-white text-truncate">LegalTech Honduras</span>
         </a>
+    </div>
+
+    <div class="nav-scrollable">
+        <nav class="nav flex-column py-2">
+            <div class="nav-item px-2 px-md-3">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All" @onclick="HandleItemClick" title="Inicio / Torre de Control">
+                    <RadzenIcon Icon="home" Class="nav-icon" Style="font-size: 1.25rem;" />
+                    <span class="nav-text ms-2">Inicio</span>
+                </NavLink>
+            </div>
+
+            <AuthorizeView Roles="@($"{RolesSistema.SocioDirector},{RolesSistema.AbogadoSenior},{RolesSistema.Paralegal},{RolesSistema.Finanzas}")">
+                <div class="nav-item px-2 px-md-3">
+                    <NavLink class="nav-link" href="expedientes" @onclick="HandleItemClick" title="Expedientes Marcarios">
+                        <RadzenIcon Icon="folder_special" Class="nav-icon" Style="font-size: 1.25rem;" />
+                        <span class="nav-text ms-2">Expedientes Marcarios</span>
+                    </NavLink>
+                </div>
+            </AuthorizeView>
+
+            <AuthorizeView Roles="@($"{RolesSistema.SocioDirector},{RolesSistema.AbogadoSenior},{RolesSistema.Paralegal},{RolesSistema.Finanzas}")">
+                <div class="nav-item px-2 px-md-3">
+                    <NavLink class="nav-link" href="clientes" @onclick="HandleItemClick" title="Clientes y Titulares">
+                        <RadzenIcon Icon="people" Class="nav-icon" Style="font-size: 1.25rem;" />
+                        <span class="nav-text ms-2">Clientes y Titulares</span>
+                    </NavLink>
+                </div>
+            </AuthorizeView>
+
+            <AuthorizeView Roles="@($"{RolesSistema.SocioDirector},{RolesSistema.AbogadoSenior}")">
+                <div class="nav-item px-2 px-md-3">
+                    <NavLink class="nav-link" href="litigios" @onclick="HandleItemClick" title="Litigios y Oposiciones">
+                        <RadzenIcon Icon="gavel" Class="nav-icon text-danger" Style="font-size: 1.25rem;" />
+                        <span class="nav-text ms-2">Litigios y Oposiciones</span>
+                    </NavLink>
+                </div>
+            </AuthorizeView>
+
+            <AuthorizeView Roles="@($"{RolesSistema.SocioDirector},{RolesSistema.Finanzas},{RolesSistema.AbogadoSenior}")">
+                <div class="nav-item px-2 px-md-3">
+                    <NavLink class="nav-link" href="facturacion" @onclick="HandleItemClick" title="Facturación y Cobranzas">
+                        <RadzenIcon Icon="receipt_long" Class="nav-icon text-success" Style="font-size: 1.25rem;" />
+                        <span class="nav-text ms-2">Facturación y Cobranzas</span>
+                    </NavLink>
+                </div>
+            </AuthorizeView>
+
+            <AuthorizeView Roles="@RolesSistema.SocioDirector">
+                <div class="nav-item px-2 px-md-3">
+                    <NavLink class="nav-link" href="configuraciones" @onclick="HandleItemClick" title="Configuraciones y Seguridad">
+                        <RadzenIcon Icon="tune" Class="nav-icon" Style="font-size: 1.25rem;" />
+                        <span class="nav-text ms-2">Configuraciones</span>
+                    </NavLink>
+                </div>
+            </AuthorizeView>
+        </nav>
     </div>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+@code {
+    [Parameter]
+    public bool Colapsado { get; set; }
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <RadzenIcon Icon="home" Class="me-2" Style="font-size: 1.2rem;" />
-                <span>Inicio</span>
-            </NavLink>
-        </div>
+    [Parameter]
+    public EventCallback OnItemClick { get; set; }
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="expedientes">
-                <RadzenIcon Icon="folder_special" Class="me-2" Style="font-size: 1.2rem;" />
-                <span>Expedientes Marcarios</span>
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="clientes">
-                <RadzenIcon Icon="people" Class="me-2" Style="font-size: 1.2rem;" />
-                <span>Clientes y Titulares</span>
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="litigios">
-                <RadzenIcon Icon="gavel" Class="me-2 text-danger" Style="font-size: 1.2rem;" />
-                <span>Litigios y Oposiciones</span>
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="facturacion">
-                <RadzenIcon Icon="receipt_long" Class="me-2 text-success" Style="font-size: 1.2rem;" />
-                <span>Facturación y Cobranzas</span>
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="configuraciones">
-                <RadzenIcon Icon="tune" Class="me-2" Style="font-size: 1.2rem;" />
-                <span>Configuraciones</span>
-            </NavLink>
-        </div>
-    </nav>
-</div>
+    private async Task HandleItemClick()
+    {
+        if (OnItemClick.HasDelegate)
+        {
+            await OnItemClick.InvokeAsync();
+        }
+    }
+}

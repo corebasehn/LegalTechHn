@@ -1,5 +1,51 @@
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    max-width: 100vw;
+    width: 100%;
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+}
+
+/* SISTEMA RESPONSIVO ANTI-SCROLL HORIZONTAL */
+.page {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+main {
+    min-width: 0 !important;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+.content {
+    min-width: 0 !important;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* Evitar que filas Bootstrap rompan el ancho con márgenes negativos si no tienen contenedor restrictivo */
+.row {
+    --bs-gutter-x: 1rem;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+/* Asegurar scrollbar interno para DataGrids y tablas cuando las columnas excedan el ancho de pantalla */
+.rz-data-grid,
+.table-responsive,
+.rz-grid-table-wrapper {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Evitar que RadzenCard u otros contenedores sobrepasen el 100% */
+.rz-card {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
 }
 
 a, .btn-link {

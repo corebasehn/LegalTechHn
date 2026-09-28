@@ -32,6 +32,8 @@ public class LegalTechDbContext : DbContext
     public DbSet<DetalleFacturaCobro> DetallesFactura => Set<DetalleFacturaCobro>();
     public DbSet<Configuracion> Configuraciones => Set<Configuracion>();
     public DbSet<DocumentoExpediente> DocumentosExpediente => Set<DocumentoExpediente>();
+    public DbSet<Usuario> Usuarios => Set<Usuario>();
+    public DbSet<AuditoriaAcceso> AuditoriasAcceso => Set<AuditoriaAcceso>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -473,6 +475,33 @@ public class LegalTechDbContext : DbContext
                   .WithMany(e => e.Documentos)
                   .HasForeignKey(d => d.ExpedienteId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Usuarios y Seguridad RBAC
+        modelBuilder.Entity<Usuario>(entity =>
+        {
+            entity.HasKey(u => u.Id);
+            entity.Property(u => u.NombreCompleto).IsRequired().HasMaxLength(150);
+            entity.Property(u => u.Email).IsRequired().HasMaxLength(150);
+            entity.HasIndex(u => u.Email).IsUnique();
+            entity.Property(u => u.Username).IsRequired().HasMaxLength(80);
+            entity.HasIndex(u => u.Username).IsUnique();
+            entity.Property(u => u.PasswordHash).IsRequired().HasMaxLength(250);
+            entity.Property(u => u.Salt).IsRequired().HasMaxLength(100);
+            entity.Property(u => u.Rol).IsRequired().HasMaxLength(50);
+            entity.Property(u => u.Cargo).HasMaxLength(100);
+            entity.Property(u => u.Telefono).HasMaxLength(50);
+        });
+
+        // Bitácora de Auditoría de Accesos
+        modelBuilder.Entity<AuditoriaAcceso>(entity =>
+        {
+            entity.HasKey(a => a.Id);
+            entity.Property(a => a.EmailIngresado).IsRequired().HasMaxLength(150);
+            entity.Property(a => a.IpDireccion).HasMaxLength(50);
+            entity.Property(a => a.Navegador).HasMaxLength(250);
+            entity.Property(a => a.Detalle).IsRequired().HasMaxLength(300);
+            entity.HasIndex(a => a.Fecha);
         });
     }
 }

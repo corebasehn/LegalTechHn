@@ -2,9 +2,15 @@ using LegalTech.Web.Components;
 using LegalTech.Web.Domain.Entities;
 using LegalTech.Web.Domain.Enums;
 using LegalTech.Web.Infrastructure.Data;
+using LegalTech.Web.Infrastructure.Security;
 using LegalTech.Web.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +25,20 @@ if (!string.IsNullOrEmpty(port))
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddRadzenComponents();
+
+// Soporte de Seguridad, Autenticación y Autorización RBAC basada en Cookies
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "LegalTech.Session";
+        options.LoginPath = "/login";
+        options.AccessDeniedPath = "/acceso-denegado";
+        options.ExpireTimeSpan = TimeSpan.FromHours(12);
+        options.SlidingExpiration = true;
+    });
+builder.Services.AddAuthorization();
+builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddScoped<AuthService>();
 
 // Configuración de Entity Framework Core con SQLite y Factory para Blazor
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=legaltech.db";
@@ -189,6 +209,42 @@ using (var scope = app.Services.CreateScope())
         );
     ");
 
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS ""Usuarios"" (
+            ""Id"" TEXT NOT NULL CONSTRAINT ""PK_Usuarios"" PRIMARY KEY,
+            ""NombreCompleto"" TEXT NOT NULL,
+            ""Email"" TEXT NOT NULL,
+            ""Username"" TEXT NOT NULL,
+            ""PasswordHash"" TEXT NOT NULL,
+            ""Salt"" TEXT NOT NULL,
+            ""Rol"" TEXT NOT NULL,
+            ""Cargo"" TEXT NULL,
+            ""Telefono"" TEXT NULL,
+            ""Activo"" INTEGER NOT NULL,
+            ""IntentosFallidos"" INTEGER NOT NULL,
+            ""BloqueadoHasta"" TEXT NULL,
+            ""UltimoAcceso"" TEXT NULL,
+            ""CreadoEn"" TEXT NOT NULL,
+            ""ActualizadoEn"" TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Usuarios_Email"" ON ""Usuarios"" (""Email"");
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Usuarios_Username"" ON ""Usuarios"" (""Username"");
+    ");
+
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS ""AuditoriasAcceso"" (
+            ""Id"" TEXT NOT NULL CONSTRAINT ""PK_AuditoriasAcceso"" PRIMARY KEY,
+            ""UsuarioId"" TEXT NULL,
+            ""EmailIngresado"" TEXT NOT NULL,
+            ""Fecha"" TEXT NOT NULL,
+            ""Exitoso"" INTEGER NOT NULL,
+            ""IpDireccion"" TEXT NULL,
+            ""Navegador"" TEXT NULL,
+            ""Detalle"" TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_AuditoriasAcceso_Fecha"" ON ""AuditoriasAcceso"" (""Fecha"");
+    ");
+
     // Si la tabla de feriados está vacía, poblar los feriados oficiales hondureños
     if (!db.FeriadosNacionales.Any())
     {
@@ -343,6 +399,10 @@ using (var scope = app.Services.CreateScope())
     // Inicializar llaves base de configuración (RutaLocal, Synology, etc.)
     var configService = scope.ServiceProvider.GetRequiredService<ConfiguracionService>();
     configService.InicializarConfiguracionesBaseAsync(db).GetAwaiter().GetResult();
+
+    // Inicializar usuarios base del despacho (Socio Director, Abogado, Paralegal, Finanzas)
+    var authService = scope.ServiceProvider.GetRequiredService<AuthService>();
+    authService.InicializarUsuariosBaseAsync(db).GetAwaiter().GetResult();
 }
 
 // Configure the HTTP request pipeline.
@@ -354,8 +414,84 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
+// Endpoint HTTP para Iniciar Sesión con Cookie Segura
+app.MapPost("/account/login", async (
+    HttpContext context,
+    [FromForm] string identificador,
+    [FromForm] string password,
+    [FromQuery] string? returnUrl,
+    AuthService authService) =>
+{
+    var resultado = await authService.ValidarCredencialesAsync(
+        identificador, password, context.Connection.RemoteIpAddress?.ToString(), context.Request.Headers.UserAgent);
+
+    if (!resultado.Exitoso || resultado.Sesion == null)
+    {
+        var error = Uri.EscapeDataString(resultado.Error ?? "Error de credenciales");
+        return Results.Redirect($"/login?error={error}&returnUrl={Uri.EscapeDataString(returnUrl ?? "/")}");
+    }
+
+    var claims = new List<Claim>
+    {
+        new(ClaimTypes.NameIdentifier, resultado.Sesion.Id.ToString()),
+        new(ClaimTypes.Name, resultado.Sesion.NombreCompleto),
+        new(ClaimTypes.Email, resultado.Sesion.Email),
+        new(ClaimTypes.Role, resultado.Sesion.Rol),
+        new(ClaimTypes.GivenName, resultado.Sesion.Username),
+        new("Cargo", resultado.Sesion.Cargo),
+        new("TokenSesion", resultado.Sesion.TokenSesion)
+    };
+
+    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+    var principal = new ClaimsPrincipal(identity);
+
+    await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, new AuthenticationProperties
+    {
+        IsPersistent = true,
+        ExpiresUtc = DateTimeOffset.UtcNow.AddHours(12)
+    });
+
+    string destino = !string.IsNullOrWhiteSpace(returnUrl) && returnUrl.StartsWith("/") ? returnUrl : "/";
+    return Results.Redirect(destino);
+}).DisableAntiforgery();
+
+// Endpoint HTTP para Cerrar Sesión Segura
+app.MapPost("/account/logout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Redirect("/login");
+}).DisableAntiforgery();
+
+// Endpoint seguro para streaming de documentos confidenciales (PDF, imágenes, escritos)
+app.MapGet("/api/documentos/{id:guid}", async (Guid id, IDbContextFactory<LegalTechDbContext> factory, IWebHostEnvironment env, HttpContext context) =>
+{
+    using var db = await factory.CreateDbContextAsync();
+    var doc = await db.DocumentosExpediente.FindAsync(id);
+    if (doc == null)
+    {
+        return Results.NotFound("Documento confidencial no encontrado.");
+    }
+
+    if (doc.RutaAlmacenamiento.StartsWith("/"))
+    {
+        string webRoot = env.WebRootPath ?? Path.Combine(AppContext.BaseDirectory, "wwwroot");
+        string rutaFisica = Path.Combine(webRoot, doc.RutaAlmacenamiento.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        if (File.Exists(rutaFisica))
+        {
+            var stream = File.OpenRead(rutaFisica);
+            bool esDescarga = context.Request.Query.ContainsKey("download");
+            return Results.File(stream, doc.TipoMime, esDescarga ? doc.NombreOriginal : null, enableRangeProcessing: true);
+        }
+    }
+
+    return Results.NotFound("El archivo físico no fue localizado en el servidor.");
+});
+
+app.UseStaticFiles();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

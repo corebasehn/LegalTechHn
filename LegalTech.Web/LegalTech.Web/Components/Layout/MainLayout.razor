@@ -1,24 +1,179 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@inject AuthService AuthService
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
+<div class="page @(sidebarColapsado ? "sidebar-colapsada" : "")">
+    <!-- Backdrop oscuro para móvil cuando el menú se despliega -->
+    @if (sidebarMovilAbierto)
+    {
+        <div class="sidebar-backdrop" @onclick="CerrarSidebarMovil"></div>
+    }
+
+    <div class="sidebar @(sidebarColapsado ? "colapsado" : "") @(sidebarMovilAbierto ? "movil-abierto" : "")">
+        <NavMenu Colapsado="sidebarColapsado" OnItemClick="CerrarSidebarMovil" />
     </div>
 
     <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+        <div class="top-row px-2 px-md-3 d-flex align-items-center justify-content-between shadow-sm border-bottom bg-white" style="min-height: 54px;">
+            <div class="d-flex align-items-center gap-2">
+                <!-- BOTÓN DE COLAPSAR / EXPANDIR SIDEBAR -->
+                <button type="button" class="btn btn-light btn-sm d-flex align-items-center justify-content-center p-1 border shadow-none" 
+                        @onclick="ToggleSidebar" 
+                        title="@(sidebarColapsado ? "Expandir menú de navegación" : "Contraer menú para ampliar espacio")" 
+                        style="width: 36px; height: 36px; border-radius: 8px; cursor: pointer; color: #1b6ec2;">
+                    <RadzenIcon Icon="@(sidebarColapsado ? "menu" : "menu_open")" Style="font-size: 1.35rem;" />
+                </button>
+
+                <span class="fw-bold text-dark d-none d-md-inline" style="font-size: 0.9rem;">
+                    ⚖️ LegalTech Honduras &bull; <span class="text-muted fw-normal">Gestión Notarial y Propiedad Intelectual</span>
+                </span>
+                <span class="fw-bold text-dark d-inline d-md-none" style="font-size: 0.85rem;">
+                    ⚖️ LegalTech
+                </span>
+            </div>
+
+            <AuthorizeView>
+                <Authorized>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="d-flex align-items-center gap-2 text-end">
+                            <div class="d-none d-sm-block">
+                                <strong class="d-block text-dark small" style="line-height: 1.1;">@context.User.Identity?.Name</strong>
+                                <span class="@RolesSistema.ObtenerBadgeColor(context.User.FindFirst(ClaimTypes.Role)?.Value ?? "")" style="font-size: 0.68rem;">
+                                    @RolesSistema.ObtenerNombreLegible(context.User.FindFirst(ClaimTypes.Role)?.Value ?? "")
+                                </span>
+                            </div>
+                            <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-2 d-flex align-items-center justify-content-center shadow-sm" style="width: 36px; height: 36px;">
+                                <RadzenIcon Icon="@RolesSistema.ObtenerIcono(context.User.FindFirst(ClaimTypes.Role)?.Value ?? "")" Style="font-size: 1.2rem;" />
+                            </div>
+                        </div>
+
+                        <RadzenButton Icon="vpn_key" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                                      Click="@AbrirModalCambioPassword" title="Cambiar mi contraseña" />
+
+                        <form method="post" action="/account/logout" class="d-inline m-0 p-0">
+                            <button type="submit" class="rz-button rz-button-xs rz-variant-flat rz-danger d-inline-flex align-items-center gap-1 border-0" title="Cerrar Sesión Segura">
+                                <RadzenIcon Icon="logout" Style="font-size: 0.85rem;" />
+                                <span>Salir</span>
+                            </button>
+                        </form>
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <div>
+                        <RadzenButton Icon="login" Text="Iniciar Sesión" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" 
+                                      Click="@(() => NavigationManager.NavigateTo("/login"))" />
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
         </div>
 
-        <article class="content px-4">
+        <article class="content px-2 px-md-3 py-3">
             @Body
         </article>
     </main>
 </div>
 
+<!-- MODAL CAMBIAR CONTRASEÑA -->
+@if (mostrandoModalPassword)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header bg-primary text-white p-3">
+                    <h6 class="modal-title fw-bold m-0 d-flex align-items-center gap-2">
+                        <RadzenIcon Icon="vpn_key" /> Cambiar Mi Contraseña
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" @onclick="@(() => mostrandoModalPassword = false)"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Contraseña Actual:</label>
+                        <RadzenPassword @bind-Value="passActual" Class="w-100" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Nueva Contraseña (mín. 6 caracteres):</label>
+                        <RadzenPassword @bind-Value="passNueva" Class="w-100" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Confirmar Nueva Contraseña:</label>
+                        <RadzenPassword @bind-Value="passConfirmar" Class="w-100" />
+                    </div>
+                </div>
+                <div class="modal-footer bg-light p-2 justify-content-between">
+                    <RadzenButton Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => mostrandoModalPassword = false)" />
+                    <RadzenButton Text="Actualizar Contraseña" Icon="check" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@GuardarNuevaPassword" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
+    Ocurrió un error inesperado en la aplicación.
+    <a href="." class="reload">Recargar</a>
     <span class="dismiss">🗙</span>
 </div>
 <RadzenComponents />
+
+@code {
+    private bool sidebarColapsado = false;
+    private bool sidebarMovilAbierto = false;
+    private bool mostrandoModalPassword = false;
+    private string passActual = string.Empty;
+    private string passNueva = string.Empty;
+    private string passConfirmar = string.Empty;
+
+    private void ToggleSidebar()
+    {
+        sidebarColapsado = !sidebarColapsado;
+        sidebarMovilAbierto = !sidebarMovilAbierto;
+    }
+
+    private void CerrarSidebarMovil()
+    {
+        sidebarMovilAbierto = false;
+    }
+
+    private void AbrirModalCambioPassword()
+    {
+        passActual = string.Empty;
+        passNueva = string.Empty;
+        passConfirmar = string.Empty;
+        mostrandoModalPassword = true;
+    }
+
+    private async Task GuardarNuevaPassword()
+    {
+        if (string.IsNullOrWhiteSpace(passActual) || string.IsNullOrWhiteSpace(passNueva))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Debe completar todos los campos.");
+            return;
+        }
+
+        if (passNueva != passConfirmar)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "La confirmación no coincide con la nueva contraseña.");
+            return;
+        }
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var idStr = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (Guid.TryParse(idStr, out var userId))
+        {
+            var res = await AuthService.CambiarPasswordAsync(userId, passActual, passNueva);
+            if (res.Exitoso)
+            {
+                NotificationService.Notify(NotificationSeverity.Success, "Éxito", "Su contraseña ha sido actualizada correctamente.");
+                mostrandoModalPassword = false;
+            }
+            else
+            {
+                NotificationService.Notify(NotificationSeverity.Error, "Error", res.Error ?? "No se pudo actualizar la contraseña.");
+            }
+        }
+    }
+}

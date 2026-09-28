@@ -1,4 +1,5 @@
 @page "/configuraciones"
+@attribute [Authorize(Roles = "SocioDirector")]
 @rendermode InteractiveServer
 @using LegalTech.Web.Domain.Entities
 @using LegalTech.Web.Services
@@ -6,6 +7,7 @@
 @inject PlazosService PlazosService
 @inject FacturacionService FacturacionService
 @inject ConfiguracionService ConfiguracionService
+@inject AuthService AuthService
 @inject NotificationService NotificationService
 @inject DialogService DialogService
 @inject NavigationManager NavigationManager
@@ -1054,8 +1056,211 @@
                 </div>
             </RadzenCard>
         }
+
+        <!-- ========================================================= -->
+        <!-- 10. VISTA: USUARIOS Y ROLES DE SEGURIDAD (RBAC)           -->
+        <!-- ========================================================= -->
+        else if (catalogoSeleccionado == "usuarios-seguridad")
+        {
+            <RadzenCard Class="p-3 shadow-sm border-0 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <div>
+                        <RadzenText TextStyle="TextStyle.H6" Class="m-0 text-primary fw-bold">
+                            <RadzenIcon Icon="admin_panel_settings" Class="me-1" /> Usuarios y Roles de Seguridad (RBAC)
+                        </RadzenText>
+                        <small class="text-muted">Control de acceso estricto al despacho. Gestión de roles, reseteo de contraseñas y bitácora de auditoría.</small>
+                    </div>
+                    <RadzenButton Icon="person_add" Text="Nuevo Usuario" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                  Click="@AbrirNuevoUsuario" />
+                </div>
+
+                @if (editandoUsuario != null)
+                {
+                    <RadzenCard Class="mb-3 p-3 bg-light border border-primary">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <strong class="text-primary">@(editandoUsuario.Id == Guid.Empty ? "Crear Nuevo Usuario" : $"Editar Usuario: {editandoUsuario.NombreCompleto}")</strong>
+                            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" Click="@(() => editandoUsuario = null)" />
+                        </div>
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Nombre Completo" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoUsuario.NombreCompleto" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Correo Electrónico Oficial" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoUsuario.Email" Placeholder="ej: abogado@legaltech.hn" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Nombre de Usuario (Login)" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoUsuario.Username" Placeholder="ej: cmendoza" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Rol del Sistema" Class="w-100">
+                                    <RadzenDropDown @bind-Value="editandoUsuario.Rol" Data="@RolesSistema.TodosLosRoles" Class="w-100">
+                                        <Template Context="r">
+                                            <span>@RolesSistema.ObtenerNombreLegible(r)</span>
+                                        </Template>
+                                    </RadzenDropDown>
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Cargo en el Despacho" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoUsuario.Cargo" Placeholder="ej: Abogado Asociado" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Teléfono / Extensión" Class="w-100">
+                                    <RadzenTextBox @bind-Value="editandoUsuario.Telefono" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <RadzenFormField Text="@(editandoUsuario.Id == Guid.Empty ? "Contraseña Inicial (mín. 6 car.)" : "Nueva Contraseña (dejar en blanco si no cambia)")" Class="w-100">
+                                    <RadzenPassword @bind-Value="passwordNuevoUsuario" Class="w-100" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="6" Class="d-flex align-items-center">
+                                <div class="d-flex align-items-center gap-2 pt-3">
+                                    <RadzenCheckBox @bind-Value="editandoUsuario.Activo" Name="chkActivoUser" />
+                                    <RadzenLabel Text="Cuenta Habilitada y Activa para Iniciar Sesión" Component="chkActivoUser" />
+                                </div>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" Class="text-end">
+                                <RadzenButton Icon="save" Text="Guardar Usuario" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@GuardarUsuario" Class="me-2" />
+                                <RadzenButton Icon="cancel" Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => editandoUsuario = null)" />
+                            </RadzenColumn>
+                        </RadzenRow>
+                    </RadzenCard>
+                }
+
+                <!-- TABS INTERNAS: USUARIOS VS AUDITORÍA -->
+                <RadzenTabs TabPosition="TabPosition.Top" Class="w-100">
+                    <Tabs>
+                        <RadzenTabsItem Text="Padrón de Usuarios del Despacho" Icon="badge">
+                            <div class="table-responsive w-100 pt-2">
+                                <RadzenDataGrid Data="@usuariosSistema" TItem="Usuario" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10" Style="width: 100%;">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="Usuario" Property="NombreCompleto" Title="Usuario / Cargo" Width="260px">
+                                            <Template Context="u">
+                                                <div>
+                                                    <strong class="text-dark d-block">@u.NombreCompleto</strong>
+                                                    <small class="text-muted">@u.Cargo</small>
+                                                </div>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="Usuario" Property="Email" Title="Correo / Usuario" Width="220px">
+                                            <Template Context="u">
+                                                <div>
+                                                    <span class="d-block text-primary small font-monospace">@u.Email</span>
+                                                    <small class="text-muted">Login: <b>@u.Username</b></small>
+                                                </div>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="Usuario" Property="Rol" Title="Rol de Seguridad" Width="180px">
+                                            <Template Context="u">
+                                                <span class="@RolesSistema.ObtenerBadgeColor(u.Rol)">
+                                                    @RolesSistema.ObtenerNombreLegible(u.Rol)
+                                                </span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="Usuario" Property="Activo" Title="Estado" Width="110px" TextAlign="TextAlign.Center">
+                                            <Template Context="u">
+                                                @if (u.BloqueadoHasta.HasValue && u.BloqueadoHasta.Value > DateTime.UtcNow)
+                                                {
+                                                    <span class="badge bg-danger" title="Bloqueado por intentos fallidos">🔒 Bloqueado</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge @(u.Activo ? "bg-success" : "bg-secondary")">
+                                                        @(u.Activo ? "Activo" : "Inactivo")
+                                                    </span>
+                                                }
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="Usuario" Property="UltimoAcceso" Title="Último Acceso" Width="150px">
+                                            <Template Context="u">
+                                                <small class="text-muted">@(u.UltimoAcceso?.ToString("dd/MM/yyyy HH:mm") ?? "Nunca")</small>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="Usuario" Title="Acciones" Width="140px" TextAlign="TextAlign.Center">
+                                            <Template Context="u">
+                                                <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
+                                                              Click="@(() => EditarUsuario(u))" Class="me-1" title="Editar Usuario" />
+                                                <RadzenButton Icon="vpn_key" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
+                                                              Click="@(() => AbrirModalResetPassword(u))" Class="me-1" title="Resetear Contraseña" />
+                                                <RadzenButton Icon="@(u.Activo ? "toggle_on" : "toggle_off")" 
+                                                              ButtonStyle="@(u.Activo ? ButtonStyle.Danger : ButtonStyle.Light)" 
+                                                              Size="ButtonSize.ExtraSmall" Click="@(() => ToggleActivoUsuario(u.Id))" 
+                                                              title="@(u.Activo ? "Desactivar Acceso" : "Activar Acceso")" />
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        </RadzenTabsItem>
+
+                        <RadzenTabsItem Text="Bitácora de Auditoría de Accesos" Icon="security">
+                            <div class="table-responsive w-100 pt-2">
+                                <RadzenDataGrid Data="@bitacoraAccesos" TItem="AuditoriaAcceso" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10" Style="width: 100%;">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="AuditoriaAcceso" Property="Fecha" Title="Fecha y Hora" Width="160px">
+                                            <Template Context="a">
+                                                <strong>@a.Fecha.ToString("dd/MM/yyyy HH:mm:ss")</strong>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="AuditoriaAcceso" Property="EmailIngresado" Title="Identificador Ingresado" Width="220px">
+                                            <Template Context="a">
+                                                <code class="text-dark">@a.EmailIngresado</code>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="AuditoriaAcceso" Property="Exitoso" Title="Resultado" Width="120px" TextAlign="TextAlign.Center">
+                                            <Template Context="a">
+                                                <span class="badge @(a.Exitoso ? "bg-success" : "bg-danger")">
+                                                    @(a.Exitoso ? "✓ Exitoso" : "✗ Fallido")
+                                                </span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="AuditoriaAcceso" Property="Detalle" Title="Detalle del Evento de Seguridad" />
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        </RadzenTabsItem>
+                    </Tabs>
+                </RadzenTabs>
+            </RadzenCard>
+        }
     }
 </div>
+
+<!-- MODAL RESETEO DE PASSWORD POR SOCIO DIRECTOR -->
+@if (mostrandoModalResetPass && usuarioParaResetPass != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header bg-warning text-dark p-3">
+                    <h6 class="modal-title fw-bold m-0 d-flex align-items-center gap-2">
+                        <RadzenIcon Icon="vpn_key" /> Resetear Contraseña: @usuarioParaResetPass.NombreCompleto
+                    </h6>
+                    <button type="button" class="btn-close" @onclick="@(() => mostrandoModalResetPass = false)"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="small text-muted mb-3">
+                        Como <b>Socio Director</b>, puede asignar una nueva clave a este usuario y desbloquear su cuenta inmediatamente.
+                    </p>
+                    <label class="form-label small fw-bold">Nueva Contraseña (mín. 6 caracteres):</label>
+                    <RadzenPassword @bind-Value="passResetModal" Placeholder="••••••••••••" Class="w-100" />
+                </div>
+                <div class="modal-footer bg-light p-2 justify-content-between">
+                    <RadzenButton Text="Cancelar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => mostrandoModalResetPass = false)" />
+                    <RadzenButton Text="Aplicar Nueva Clave" Icon="check" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@ConfirmarResetPassword" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     private bool cargando = true;
@@ -1077,6 +1282,7 @@
         new("parametros-fiscales", "Parámetros Fiscales y Tasas Oficiales (SAR / DIGEPIH)", "account_balance", "Tasas de cambio BCH, ISV 15%, timbres CAH (L 50), tasas DIGEPIH y CAI"),
         new("tarifas-arancelarias", "Tarifas de Honorarios y Aranceles por Etapa", "price_change", "Aranceles en HNL y USD por tipo de trámite (búsqueda, presentación, litigios)"),
         new("configuraciones-sistema", "Parámetros del Sistema y Almacenamiento (Synology NAS)", "dns", "Configuración de rutas de almacenamiento, Synology NAS y llaves globales sin código en duro"),
+        new("usuarios-seguridad", "Usuarios y Roles de Seguridad (RBAC)", "admin_panel_settings", "Gestión de cuentas de usuarios, roles de acceso, contraseñas y bitácora de auditoría"),
         new("clientes", "Clientes y Titulares de Marcas", "people", "Administración del padrón de personas naturales y jurídicas con RTN")
     };
 
@@ -1090,12 +1296,19 @@
     private List<ParametroFiscal> parametrosFiscales = new();
     private List<TarifaArancelaria> tarifasArancelarias = new();
     private List<Configuracion> configuracionesSistema = new();
+    private List<Usuario> usuariosSistema = new();
+    private List<AuditoriaAcceso> bitacoraAccesos = new();
 
     // Modelos para edición/creación
     private TipoSigno? editandoTipoSigno;
     private EstadoProcesal? editandoEstado;
     private Configuracion? editandoConfiguracion;
     private bool mostrarClaveSynology = false;
+    private Usuario? editandoUsuario;
+    private string passwordNuevoUsuario = string.Empty;
+    private bool mostrandoModalResetPass = false;
+    private Usuario? usuarioParaResetPass;
+    private string passResetModal = string.Empty;
     private TipoActuacion? editandoActuacion;
     private ViaPresentacion? editandoVia;
     private UbicacionArchivo? editandoUbicacion;
@@ -1145,6 +1358,8 @@
         parametrosFiscales = await FacturacionService.GetParametrosFiscalesAsync();
         tarifasArancelarias = await FacturacionService.GetTarifasAsync(soloActivas: false);
         configuracionesSistema = await ConfiguracionService.GetConfiguracionesAsync();
+        usuariosSistema = await AuthService.GetUsuariosAsync();
+        bitacoraAccesos = await AuthService.GetAuditoriasAccesosAsync(50);
         cargando = false;
     }
 
@@ -1595,5 +1810,101 @@
         NotificationService.Notify(NotificationSeverity.Info, "Modo de Almacenamiento Actualizado", 
             $"El repositorio de documentos ahora guardará en modo: {nuevoModo}");
         await CargarCatalogos();
+    }
+
+    // -------------------------------------------------------------
+    // GESTIÓN DE USUARIOS Y ROLES DE SEGURIDAD (RBAC)
+    // -------------------------------------------------------------
+    private void AbrirNuevoUsuario()
+    {
+        editandoUsuario = new Usuario
+        {
+            Rol = RolesSistema.AbogadoSenior,
+            Activo = true
+        };
+        passwordNuevoUsuario = string.Empty;
+    }
+
+    private void EditarUsuario(Usuario u)
+    {
+        editandoUsuario = new Usuario
+        {
+            Id = u.Id,
+            NombreCompleto = u.NombreCompleto,
+            Email = u.Email,
+            Username = u.Username,
+            Rol = u.Rol,
+            Cargo = u.Cargo,
+            Telefono = u.Telefono,
+            Activo = u.Activo
+        };
+        passwordNuevoUsuario = string.Empty;
+    }
+
+    private async Task GuardarUsuario()
+    {
+        if (editandoUsuario == null) return;
+
+        if (string.IsNullOrWhiteSpace(editandoUsuario.NombreCompleto) || 
+            string.IsNullOrWhiteSpace(editandoUsuario.Email) || 
+            string.IsNullOrWhiteSpace(editandoUsuario.Username))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "Complete nombre, correo y usuario.");
+            return;
+        }
+
+        var resultado = await AuthService.GuardarUsuarioAsync(editandoUsuario, 
+            string.IsNullOrWhiteSpace(passwordNuevoUsuario) ? null : passwordNuevoUsuario);
+
+        if (resultado.Exitoso)
+        {
+            NotificationService.Notify(NotificationSeverity.Success, "Usuario Guardado", 
+                $"El usuario '{editandoUsuario.NombreCompleto}' ha sido guardado exitosamente.");
+            editandoUsuario = null;
+            await CargarCatalogos();
+        }
+        else
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", resultado.Error ?? "No se pudo guardar el usuario.");
+        }
+    }
+
+    private async Task ToggleActivoUsuario(Guid id)
+    {
+        await AuthService.ToggleActivoUsuarioAsync(id);
+        NotificationService.Notify(NotificationSeverity.Info, "Estado Actualizado", "El estado del usuario ha sido actualizado.");
+        await CargarCatalogos();
+    }
+
+    private void AbrirModalResetPassword(Usuario u)
+    {
+        usuarioParaResetPass = u;
+        passResetModal = string.Empty;
+        mostrandoModalResetPass = true;
+    }
+
+    private async Task ConfirmarResetPassword()
+    {
+        if (usuarioParaResetPass == null) return;
+
+        if (string.IsNullOrWhiteSpace(passResetModal) || passResetModal.Length < 6)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Validación", "La nueva clave debe tener al menos 6 caracteres.");
+            return;
+        }
+
+        var resultado = await AuthService.ResetearPasswordAdminAsync(usuarioParaResetPass.Id, passResetModal);
+        if (resultado.Exitoso)
+        {
+            NotificationService.Notify(NotificationSeverity.Success, "Contraseña Reseteada", 
+                $"Se ha asignado la nueva contraseña a '{usuarioParaResetPass.NombreCompleto}'.");
+            mostrandoModalResetPass = false;
+            usuarioParaResetPass = null;
+            await CargarCatalogos();
+        }
+        else
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", resultado.Error ?? "No se pudo resetear la contraseña.");
+        }
     }
 }
