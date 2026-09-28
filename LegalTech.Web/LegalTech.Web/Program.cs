@@ -260,6 +260,49 @@ using (var scope = app.Services.CreateScope())
         );
         db.SaveChanges();
     }
+
+    // Garantizar que la tabla ParametrosFiscales contenga todos los parámetros base y de facturación SAR
+    var parametrosFiscalesBase = new List<ParametroFiscal>
+    {
+        new() { Clave = "ISV_PORCENTAJE", Nombre = "Porcentaje Impuesto sobre Ventas (ISV)", Valor = "15.00", TipoDato = "decimal", Categoria = "Impuestos", Descripcion = "Tasa general del 15% sobre honorarios profesionales de servicios legales", Activo = true },
+        new() { Clave = "TASA_CAMBIO_USD_HNL", Nombre = "Tasa de Cambio Oficial (USD a HNL)", Valor = "25.50", TipoDato = "decimal", Categoria = "Divisas", Descripcion = "Tipo de cambio de referencia del Banco Central de Honduras (BCH)", Activo = true },
+        new() { Clave = "TIMBRE_CONTRATACION_HNL", Nombre = "Timbre de Contratación (Colegio de Abogados)", Valor = "50.00", TipoDato = "decimal", Categoria = "Tasas Oficiales", Descripcion = "Timbre obligatorio del CAH por cada solicitud presentada en ventanilla", Activo = true },
+        new() { Clave = "TASA_SOLICITUD_DIGEPIH_HNL", Nombre = "Tasa Oficial de Presentación DIGEPIH", Valor = "700.00", TipoDato = "decimal", Categoria = "Tasas Oficiales", Descripcion = "Tasa gubernamental de radicación de solicitud por cada clase Niza", Activo = true },
+        new() { Clave = "TASA_REGISTRO_TITULO_HNL", Nombre = "Tasa Oficial de Emisión de Certificado", Valor = "500.00", TipoDato = "decimal", Categoria = "Tasas Oficiales", Descripcion = "Tasa oficial ante DIGEPIH por emisión del título de concesión", Activo = true },
+        new() { Clave = "TASA_PUBLICACION_ENAG_HNL", Nombre = "Tasa de Publicación en La Gaceta (ENAG)", Valor = "650.00", TipoDato = "decimal", Categoria = "Tasas Oficiales", Descripcion = "Pago a la Empresa Nacional de Artes Gráficas por los 3 avisos de ley", Activo = true },
+        new() { Clave = "CAI_SAR_AUTORIZADO", Nombre = "Código de Autorización de Impresión (CAI)", Valor = "A84F2B-98CE21-1B4480-1498B2-FA8321-44", TipoDato = "string", Categoria = "Facturación SAR", Descripcion = "Régimen de facturación autorizado por el Servicio de Administración de Rentas", Activo = true },
+        new() { Clave = "FECHA_LIMITE_SAR", Nombre = "Fecha Límite de Emisión de Facturas", Valor = "2027-12-31", TipoDato = "date", Categoria = "Facturación SAR", Descripcion = "Fecha máxima de vigencia del rango de facturación asignado por SAR", Activo = true },
+        new() { Clave = "RTN_EMISOR", Nombre = "RTN del Emisor (Bufete)", Valor = "08011990123456", TipoDato = "string", Categoria = "Datos del Emisor", Descripcion = "Registro Tributario Nacional del emisor autorizado ante el SAR", Activo = true },
+        new() { Clave = "NOMBRE_EMISOR", Nombre = "Razón Social del Emisor", Valor = "LegalTech Honduras S. de R.L.", TipoDato = "string", Categoria = "Datos del Emisor", Descripcion = "Nombre comercial o razón social registrada en el SAR", Activo = true },
+        new() { Clave = "DIRECCION_EMISOR", Nombre = "Dirección Fiscal del Emisor", Valor = "Edificio Corporativo Centro Morazán, Torre 1, Piso 7, Boulevard Morazán, Tegucigalpa, M.D.C., Francisco Morazán, Honduras", TipoDato = "string", Categoria = "Datos del Emisor", Descripcion = "Dirección fiscal del establecimiento matriz", Activo = true },
+        new() { Clave = "TELEFONO_EMISOR", Nombre = "Teléfono de Contacto", Valor = "+504 2239-0000 / +504 9988-7766", TipoDato = "string", Categoria = "Datos del Emisor", Descripcion = "Teléfonos del bufete para atención y consultas fiscales", Activo = true },
+        new() { Clave = "CORREO_EMISOR", Nombre = "Correo Electrónico de Facturación", Valor = "facturacion@legaltech.hn", TipoDato = "string", Categoria = "Datos del Emisor", Descripcion = "Correo oficial del departamento de cobranzas y facturación", Activo = true },
+        new() { Clave = "RANGO_AUTORIZADO_SAR", Nombre = "Rango Autorizado por el SAR", Valor = "001-001-01-00000001 al 001-001-01-00050000", TipoDato = "string", Categoria = "Facturación SAR", Descripcion = "Rango de numeración fiscal autorizada por el SAR", Activo = true }
+    };
+
+    foreach (var p in parametrosFiscalesBase)
+    {
+        if (!db.ParametrosFiscales.Any(x => x.Clave == p.Clave))
+        {
+            db.ParametrosFiscales.Add(p);
+        }
+    }
+    db.SaveChanges();
+
+    // Normalizar facturas emitidas o registradas previamente que aún tengan el prefijo preliminar FAC-2026-XXXX al formato oficial del SAR
+    var facturasLegacy = db.Facturas.Where(f => f.NumeroFactura.StartsWith("FAC-2026-")).ToList();
+    if (facturasLegacy.Any())
+    {
+        foreach (var fac in facturasLegacy)
+        {
+            var partes = fac.NumeroFactura.Split('-');
+            if (partes.Length >= 3 && int.TryParse(partes[2], out int corr))
+            {
+                fac.NumeroFactura = $"001-001-01-{corr:D8}";
+            }
+        }
+        db.SaveChanges();
+    }
 }
 
 // Configure the HTTP request pipeline.

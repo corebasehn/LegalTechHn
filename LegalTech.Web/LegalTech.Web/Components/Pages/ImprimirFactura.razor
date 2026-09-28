@@ -19,13 +19,58 @@
             @(factura?.EsProforma == true ? "Documento Proforma" : "Factura Fiscal SAR")
         </span>
         <strong class="font-monospace ms-2">@(factura?.NumeroFactura ?? "")</strong>
+
+        @if (factura != null && !factura.EsProforma)
+        {
+            @if (!validacionSAR.EsValido)
+            {
+                <span class="badge bg-danger text-white d-flex align-items-center gap-1 ms-2" title="@validacionSAR.MensajeError">
+                    <RadzenIcon Icon="gpp_bad" Style="font-size: 0.85rem;" />
+                    <span>IMPRESIÓN BLOQUEADA POR EL SAR</span>
+                </span>
+            }
+            else
+            {
+                <span class="badge bg-success bg-opacity-10 text-success border border-success d-flex align-items-center gap-1 ms-2">
+                    <RadzenIcon Icon="verified" Style="font-size: 0.85rem;" />
+                    <span>Régimen SAR Vigente</span>
+                </span>
+            }
+        }
     </div>
 
     <div class="d-flex align-items-center gap-2">
-        <RadzenButton Icon="print" Text="Imprimir Documento (Tamaño Carta)" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" 
-                      Click="@Imprimir" Class="fw-bold px-3 shadow-sm" />
+        @if (factura != null && !factura.EsProforma && !validacionSAR.EsValido)
+        {
+            <RadzenButton Icon="block" Text="Impresión Bloqueada (Infracción SAR)" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" 
+                          Disabled="true" Class="fw-bold px-3 shadow-sm" title="@validacionSAR.MensajeError" />
+        }
+        else
+        {
+            <RadzenButton Icon="print" Text="Imprimir Documento (Tamaño Carta)" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" 
+                          Click="@Imprimir" Class="fw-bold px-3 shadow-sm" />
+        }
     </div>
 </div>
+
+@if (factura != null && !factura.EsProforma && !validacionSAR.EsValido)
+{
+    <div class="container-fluid py-3 px-4 no-print">
+        <div class="alert alert-danger border border-2 border-danger d-flex align-items-start gap-3 p-3 shadow-sm rounded-3">
+            <RadzenIcon Icon="gpp_bad" Style="font-size: 2.5rem; color: #dc3545;" Class="mt-1" />
+            <div>
+                <h5 class="fw-bold text-danger mb-1">⛔ IMPRESIÓN BLOQUEADA: COMPROBANTE NO AUTORIZADO POR EL SAR</h5>
+                <div class="text-dark fw-bold mb-1">@validacionSAR.MensajeError</div>
+                <div class="small text-muted">
+                    <strong>Fundamento Legal (Honduras):</strong> De conformidad con el Reglamento del Régimen de Facturación y el Código Tributario,
+                    la impresión o emisión de comprobantes fiscales que superen el rango autorizado (Límite Máximo: <code>@validacionSAR.CorrelativoMaximo.ToString("D8")</code>)
+                    o cuya emisión sea posterior a la Fecha Límite autorizada (<strong>@(validacionSAR.FechaLimite?.ToString("dd/MM/yyyy") ?? "")</strong>)
+                    carece de validez fiscal y es sancionable por el SAR.
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @if (cargando)
 {
@@ -87,11 +132,19 @@ else
                                         </span>
                                     </div>
                                     <div class="mb-1" style="font-size: 7pt;">
-                                        <strong class="text-muted">Rango:</strong> @rangoAutorizado
+                                        <strong class="text-muted">Rango:</strong> 
+                                        <span class="@(validacionSAR.RangoExcedido ? "text-danger fw-bold" : "")">@rangoAutorizado</span>
                                     </div>
                                     <div style="font-size: 7.5pt;">
-                                        <strong class="text-muted">Límite Emisión:</strong> <strong class="text-danger">@fechaLimiteEmision</strong>
+                                        <strong class="text-muted">Límite Emisión:</strong> 
+                                        <strong class="@(validacionSAR.FechaLimiteExpirada ? "text-danger bg-danger bg-opacity-10 px-1" : "text-danger")">@fechaLimiteEmision</strong>
                                     </div>
+                                    @if (!validacionSAR.EsValido)
+                                    {
+                                        <div class="badge bg-danger text-white w-100 mt-1 py-1 font-monospace" style="font-size: 6.5pt;">
+                                            ⛔ BLOQUEADO: @(validacionSAR.RangoExcedido ? "RANGO SAR EXCEDIDO" : "FECHA LÍMITE EXPIRADA")
+                                        </div>
+                                    }
                                 </div>
                             }
                             else
@@ -586,6 +639,7 @@ else
     private string rangoAutorizado = "001-001-01-00000001 al 001-001-01-00050000";
     private string fechaLimiteEmision = "31/12/2027";
     private decimal tasaISVActual = 0.15m;
+    private ValidacionFiscalSARResult validacionSAR = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -602,12 +656,17 @@ else
         rangoAutorizado = await FacturacionService.GetParametroStringAsync("RANGO_AUTORIZADO_SAR", "001-001-01-00000001 al 001-001-01-00050000");
         fechaLimiteEmision = await FacturacionService.GetParametroStringAsync("FECHA_LIMITE_SAR", "31/12/2027");
 
+        if (factura != null && !factura.EsProforma)
+        {
+            validacionSAR = await FacturacionService.ValidarCumplimientoFiscalSARAsync(factura.NumeroFactura, factura.FechaEmision);
+        }
+
         cargando = false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && AutoPrint == true && factura != null)
+        if (firstRender && AutoPrint == true && factura != null && (factura.EsProforma || validacionSAR.EsValido))
         {
             await Task.Delay(300);
             await JSRuntime.InvokeVoidAsync("window.print");
@@ -616,6 +675,10 @@ else
 
     private async Task Imprimir()
     {
+        if (factura != null && !factura.EsProforma && !validacionSAR.EsValido)
+        {
+            return;
+        }
         await JSRuntime.InvokeVoidAsync("window.print");
     }
 

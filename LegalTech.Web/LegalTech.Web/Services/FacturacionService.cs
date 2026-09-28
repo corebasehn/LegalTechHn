@@ -10,6 +10,25 @@ using LegalTech.Web.Infrastructure.Data;
 namespace LegalTech.Web.Services;
 
 /// <summary>
+/// Resultado del análisis de cumplimiento normativo del SAR para una factura.
+/// Valida que el correlativo esté dentro del rango autorizado (ej: 00000001 al 00050000)
+/// y que la fecha de emisión no supere la Fecha Límite de Emisión autorizada.
+/// </summary>
+public class ValidacionFiscalSARResult
+{
+    public bool EsValido => !RangoExcedido && !FechaLimiteExpirada && !PrefijoInvalido;
+    public bool RangoExcedido { get; set; }
+    public bool FechaLimiteExpirada { get; set; }
+    public bool PrefijoInvalido { get; set; }
+    public long CorrelativoActual { get; set; }
+    public long CorrelativoMinimo { get; set; } = 1;
+    public long CorrelativoMaximo { get; set; } = 50000;
+    public string PrefijoAutorizado { get; set; } = "001-001-01-";
+    public DateTime? FechaLimite { get; set; }
+    public string MensajeError { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// Servicio integral de Facturación, Tarifarios Arancelarios, Parámetros Fiscales
 /// y Cumplimiento de la Regla Infranqueable de Solvencia P360 (Manual de Marcas de Honduras).
 /// </summary>
@@ -88,6 +107,21 @@ public class FacturacionService
         using var db = await _factory.CreateDbContextAsync();
         var p = await db.ParametrosFiscales.FirstOrDefaultAsync(x => x.Clave == clave && x.Activo);
         return p?.Valor ?? valorDefecto;
+    }
+
+    public async Task<DateTime> GetParametroFechaAsync(string clave, DateTime valorDefecto)
+    {
+        using var db = await _factory.CreateDbContextAsync();
+        var p = await db.ParametrosFiscales.FirstOrDefaultAsync(x => x.Clave == clave && x.Activo);
+        if (p != null && !string.IsNullOrWhiteSpace(p.Valor))
+        {
+            if (DateTime.TryParse(p.Valor, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt) ||
+                DateTime.TryParse(p.Valor, out dt))
+            {
+                return dt;
+            }
+        }
+        return valorDefecto;
     }
 
     // =========================================================================
@@ -201,6 +235,214 @@ public class FacturacionService
     }
 
     /// <summary>
+    /// Genera el siguiente número correlativo oficial de Factura según el rango autorizado por el SAR
+    /// (ej: 001-001-01-00000001 al 001-001-01-00050000).
+    /// </summary>
+    public async Task<string> GenerarSiguienteNumeroFacturaSARAsync()
+    {
+        using var db = await _factory.CreateDbContextAsync();
+        return await GenerarSiguienteNumeroFacturaSARInternoAsync(db);
+    }
+
+    private async Task<string> GenerarSiguienteNumeroFacturaSARInternoAsync(LegalTechDbContext db)
+    {
+        string rango = await GetParametroStringAsync("RANGO_AUTORIZADO_SAR", "001-001-01-00000001 al 001-001-01-00050000");
+        
+        string prefijo = "001-001-01-";
+        long numeroInicio = 1;
+        long numeroFin = 50000;
+
+        // Intentar parsear el rango configurado (ej: "001-001-01-00000001 al 001-001-01-00050000")
+        try
+        {
+            var partes = rango.Split(new[] { " al ", " AL ", " a ", " A " }, StringSplitOptions.RemoveEmptyEntries);
+            if (partes.Length >= 1)
+            {
+                string inicio = partes[0].Trim();
+                int ultimoGuion = inicio.LastIndexOf('-');
+                if (ultimoGuion > 0)
+                {
+                    prefijo = inicio.Substring(0, ultimoGuion + 1);
+                    string numStr = inicio.Substring(ultimoGuion + 1);
+                    if (long.TryParse(numStr, out long parsedInicio))
+                    {
+                        numeroInicio = parsedInicio;
+                    }
+                }
+            }
+            if (partes.Length >= 2)
+            {
+                string fin = partes[1].Trim();
+                int ultimoGuion = fin.LastIndexOf('-');
+                string numStr = ultimoGuion > 0 ? fin.Substring(ultimoGuion + 1) : fin;
+                if (long.TryParse(numStr, out long parsedFin))
+                {
+                    numeroFin = parsedFin;
+                }
+            }
+        }
+        catch
+        {
+            prefijo = "001-001-01-";
+            numeroInicio = 1;
+        }
+
+        // Buscar todas las facturas que ya tienen el prefijo SAR
+        var numerosExistentes = await db.Facturas
+            .Where(f => f.NumeroFactura.StartsWith(prefijo))
+            .Select(f => f.NumeroFactura)
+            .ToListAsync();
+
+        long maxCorrelativo = 0;
+        foreach (var num in numerosExistentes)
+        {
+            int ultimoGuion = num.LastIndexOf('-');
+            if (ultimoGuion > 0)
+            {
+                string seqStr = num.Substring(ultimoGuion + 1);
+                if (long.TryParse(seqStr, out long val))
+                {
+                    if (val > maxCorrelativo) maxCorrelativo = val;
+                }
+            }
+        }
+
+        long siguienteNumero;
+        if (maxCorrelativo > 0)
+        {
+            siguienteNumero = maxCorrelativo + 1;
+        }
+        else
+        {
+            // Verificar si hay facturas con formato anterior FAC-2026-XXXX
+            var facsAnteriores = await db.Facturas
+                .Where(f => f.NumeroFactura.StartsWith("FAC-"))
+                .Select(f => f.NumeroFactura)
+                .ToListAsync();
+
+            foreach (var num in facsAnteriores)
+            {
+                var partes = num.Split('-');
+                if (partes.Length >= 3 && long.TryParse(partes[2], out long val))
+                {
+                    if (val > maxCorrelativo) maxCorrelativo = val;
+                }
+            }
+
+            siguienteNumero = maxCorrelativo > 0 ? maxCorrelativo + 1 : numeroInicio;
+        }
+
+        // =========================================================================
+        // BLOQUEO 1: LÍMITE SUPERIOR DEL RANGO AUTORIZADO POR EL SAR (ej: 00050000)
+        // =========================================================================
+        if (siguienteNumero > numeroFin)
+        {
+            throw new InvalidOperationException(
+                $"[BLOQUEO FISCAL SAR]: Rango de Facturación Agotado. " +
+                $"El siguiente correlativo ({prefijo}{siguienteNumero:D8}) supera el límite máximo autorizado por el SAR ({prefijo}{numeroFin:D8}). " +
+                $"De conformidad con la ley tributaria de Honduras, no se pueden emitir facturas fuera del rango. Solicite una ampliación en la oficina virtual del SAR.");
+        }
+
+        // =========================================================================
+        // BLOQUEO 2: FECHA LÍMITE DE EMISIÓN ASIGNADA POR EL SAR
+        // =========================================================================
+        DateTime fechaLimite = await GetParametroFechaAsync("FECHA_LIMITE_SAR", new DateTime(2027, 12, 31));
+        if (DateTime.Today > fechaLimite.Date)
+        {
+            throw new InvalidOperationException(
+                $"[BLOQUEO FISCAL SAR]: Régimen de Facturación Expirado. " +
+                $"La Fecha Límite de Emisión autorizada ({fechaLimite:dd/MM/yyyy}) ha vencido. " +
+                $"El régimen tributario prohíbe emitir facturas extemporáneas. Renueve el CAI y rango en el SAR.");
+        }
+
+        return $"{prefijo}{siguienteNumero:D8}";
+    }
+
+    /// <summary>
+    /// Valida si un comprobante fiscal cumple con el rango autorizado (ej: 00000001 a 00050000)
+    /// y con la Fecha Límite de Emisión establecida por el SAR.
+    /// </summary>
+    public async Task<ValidacionFiscalSARResult> ValidarCumplimientoFiscalSARAsync(string numeroFactura, DateTime fechaEmision)
+    {
+        var res = new ValidacionFiscalSARResult();
+        string rango = await GetParametroStringAsync("RANGO_AUTORIZADO_SAR", "001-001-01-00000001 al 001-001-01-00050000");
+        DateTime fechaLimite = await GetParametroFechaAsync("FECHA_LIMITE_SAR", new DateTime(2027, 12, 31));
+        res.FechaLimite = fechaLimite;
+
+        string prefijo = "001-001-01-";
+        long numeroInicio = 1;
+        long numeroFin = 50000;
+
+        try
+        {
+            var partes = rango.Split(new[] { " al ", " AL ", " a ", " A " }, StringSplitOptions.RemoveEmptyEntries);
+            if (partes.Length >= 1)
+            {
+                string inicio = partes[0].Trim();
+                int ultimoGuion = inicio.LastIndexOf('-');
+                if (ultimoGuion > 0)
+                {
+                    prefijo = inicio.Substring(0, ultimoGuion + 1);
+                    if (long.TryParse(inicio.Substring(ultimoGuion + 1), out long pInicio))
+                        numeroInicio = pInicio;
+                }
+            }
+            if (partes.Length >= 2)
+            {
+                string fin = partes[1].Trim();
+                int ultimoGuion = fin.LastIndexOf('-');
+                string numStr = ultimoGuion > 0 ? fin.Substring(ultimoGuion + 1) : fin;
+                if (long.TryParse(numStr, out long pFin))
+                    numeroFin = pFin;
+            }
+        }
+        catch
+        {
+            prefijo = "001-001-01-";
+            numeroInicio = 1;
+            numeroFin = 50000;
+        }
+
+        res.PrefijoAutorizado = prefijo;
+        res.CorrelativoMinimo = numeroInicio;
+        res.CorrelativoMaximo = numeroFin;
+
+        // Validar número correlativo
+        if (!string.IsNullOrWhiteSpace(numeroFactura))
+        {
+            int ultimoGuion = numeroFactura.LastIndexOf('-');
+            if (ultimoGuion > 0 && long.TryParse(numeroFactura.Substring(ultimoGuion + 1), out long corr))
+            {
+                res.CorrelativoActual = corr;
+                if (corr > numeroFin)
+                {
+                    res.RangoExcedido = true;
+                    res.MensajeError += $"El correlativo ({corr:D8}) excede el límite máximo autorizado por el SAR ({numeroFin:D8}). Rango fiscal agotado. ";
+                }
+                else if (corr < numeroInicio)
+                {
+                    res.RangoExcedido = true;
+                    res.MensajeError += $"El correlativo ({corr:D8}) es inferior al inicio del rango autorizado ({numeroInicio:D8}). ";
+                }
+            }
+            else
+            {
+                res.PrefijoInvalido = true;
+                res.MensajeError += "El formato del comprobante no corresponde a un correlativo válido del SAR. ";
+            }
+        }
+
+        // Validar fecha límite de emisión
+        if (fechaEmision.Date > fechaLimite.Date)
+        {
+            res.FechaLimiteExpirada = true;
+            res.MensajeError += $"La fecha de emisión ({fechaEmision:dd/MM/yyyy}) supera la Fecha Límite de Emisión autorizada por el SAR ({fechaLimite:dd/MM/yyyy}). ";
+        }
+
+        return res;
+    }
+
+    /// <summary>
     /// Guarda una factura recalculando totales, montos de ISV (15% sobre honorarios) y saldos pendientes.
     /// </summary>
     public async Task<FacturaCobro> GuardarFacturaAsync(FacturaCobro factura, string usuario = "Usuario")
@@ -210,9 +452,45 @@ public class FacturacionService
         decimal tasaISV = await GetParametroDecimalAsync("ISV_PORCENTAJE", 15.00m) / 100m;
         string caiDefecto = await GetParametroStringAsync("CAI_SAR_AUTORIZADO", "A84F2B-98CE21-1B4480-1498B2-FA8321-44");
 
-        if (string.IsNullOrWhiteSpace(factura.NumeroCAI))
+        // Si es una factura emitida formalmente, garantizar formato y número del régimen SAR
+        if (!factura.EsProforma)
         {
-            factura.NumeroCAI = caiDefecto;
+            DateTime fechaLimite = await GetParametroFechaAsync("FECHA_LIMITE_SAR", new DateTime(2027, 12, 31));
+            if (factura.FechaEmision.Date > fechaLimite.Date)
+            {
+                throw new InvalidOperationException(
+                    $"[BLOQUEO FISCAL SAR]: La fecha de emisión ({factura.FechaEmision:dd/MM/yyyy}) supera la Fecha Límite autorizada por el SAR ({fechaLimite:dd/MM/yyyy}).");
+            }
+
+            if (string.IsNullOrWhiteSpace(factura.NumeroFactura) || 
+                factura.NumeroFactura.StartsWith("FAC-") || 
+                factura.NumeroFactura.StartsWith("PROF-") || 
+                factura.NumeroFactura.StartsWith("BORR-"))
+            {
+                factura.NumeroFactura = await GenerarSiguienteNumeroFacturaSARInternoAsync(db);
+            }
+            else
+            {
+                var valSAR = await ValidarCumplimientoFiscalSARAsync(factura.NumeroFactura, factura.FechaEmision);
+                if (!valSAR.EsValido)
+                {
+                    throw new InvalidOperationException($"[BLOQUEO FISCAL SAR]: {valSAR.MensajeError}");
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(factura.NumeroCAI))
+            {
+                factura.NumeroCAI = caiDefecto;
+            }
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(factura.NumeroFactura) || factura.NumeroFactura.StartsWith("FAC-"))
+            {
+                int countProformas = await db.Facturas.CountAsync(f => f.Estado == EstadoFactura.Borrador || f.Estado == EstadoFactura.PendienteAprobacion || f.Estado == EstadoFactura.Rechazada) + 1;
+                factura.NumeroFactura = $"PROF-2026-{countProformas:D4}";
+            }
+            factura.NumeroCAI = null;
         }
 
         // Recalcular líneas y subtotales
@@ -332,13 +610,16 @@ public class FacturacionService
         factura.Estado = EstadoFactura.Emitida;
         factura.AprobadoPor = usuarioAprobador;
         factura.FechaAprobacion = DateTime.UtcNow;
+        factura.FechaEmision = DateTime.Today;
         factura.MotivoRechazo = null;
 
-        // Si era una proforma con prefijo PROF- o BORR-, asignarle un correlativo oficial FAC-
-        if (factura.NumeroFactura.StartsWith("PROF-") || factura.NumeroFactura.StartsWith("BORR-"))
+        // Si era una proforma o tenía número temporal, asignarle correlativo oficial SAR según rango autorizado
+        if (string.IsNullOrWhiteSpace(factura.NumeroFactura) || 
+            factura.NumeroFactura.StartsWith("PROF-") || 
+            factura.NumeroFactura.StartsWith("BORR-") || 
+            factura.NumeroFactura.StartsWith("FAC-"))
         {
-            int correlativo = await db.Facturas.CountAsync(f => f.Estado != EstadoFactura.Borrador && f.Estado != EstadoFactura.PendienteAprobacion && f.Estado != EstadoFactura.Rechazada) + 1;
-            factura.NumeroFactura = $"FAC-2026-{correlativo:D4}";
+            factura.NumeroFactura = await GenerarSiguienteNumeroFacturaSARInternoAsync(db);
         }
 
         // Si no tenía CAI oficial, asignarle el CAI autorizado
@@ -346,6 +627,13 @@ public class FacturacionService
         {
             var pCai = await db.ParametrosFiscales.FirstOrDefaultAsync(p => p.Clave == "CAI_SAR_AUTORIZADO" && p.Activo);
             factura.NumeroCAI = pCai?.Valor ?? "A84F2B-98CE21-1B4480-1498B2-FA8321-44";
+        }
+
+        // Validar estrictamente rango y fecha antes de persistir
+        var valSAR = await ValidarCumplimientoFiscalSARAsync(factura.NumeroFactura, factura.FechaEmision);
+        if (!valSAR.EsValido)
+        {
+            throw new InvalidOperationException($"[BLOQUEO FISCAL SAR]: {valSAR.MensajeError}");
         }
 
         await db.SaveChangesAsync();
@@ -556,7 +844,7 @@ public class FacturacionService
             new()
             {
                 Id = Guid.NewGuid(),
-                NumeroFactura = "FAC-2026-0001",
+                NumeroFactura = "001-001-01-00000001",
                 NumeroCAI = cai,
                 ClienteId = expConcedido?.ClienteId ?? clientes.First().Id,
                 ExpedienteId = expConcedido?.Id,
@@ -590,7 +878,7 @@ public class FacturacionService
             new()
             {
                 Id = Guid.NewGuid(),
-                NumeroFactura = "FAC-2026-0002",
+                NumeroFactura = "001-001-01-00000002",
                 NumeroCAI = cai,
                 ClienteId = expGaceta?.ClienteId ?? clientes.First().Id,
                 ExpedienteId = expGaceta?.Id,
@@ -619,7 +907,7 @@ public class FacturacionService
             new()
             {
                 Id = Guid.NewGuid(),
-                NumeroFactura = "FAC-2026-0003",
+                NumeroFactura = "001-001-01-00000003",
                 NumeroCAI = cai,
                 ClienteId = expLitigio?.ClienteId ?? clientes.First().Id,
                 ExpedienteId = expLitigio?.Id,
@@ -651,7 +939,7 @@ public class FacturacionService
             new()
             {
                 Id = Guid.NewGuid(),
-                NumeroFactura = "FAC-2026-0004",
+                NumeroFactura = "001-001-01-00000004",
                 NumeroCAI = cai,
                 ClienteId = expDolares?.ClienteId ?? clientes.First().Id,
                 ExpedienteId = expDolares?.Id,

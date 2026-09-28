@@ -121,7 +121,7 @@
             <RadzenColumn Size="12" SizeMD="4">
                 <RadzenFormField Text="Buscar por número, CAI, cliente o expediente" Class="w-100">
                     <RadzenTextBox @bind-Value="textoBusqueda" @oninput="@((ChangeEventArgs e) => { textoBusqueda = e.Value?.ToString() ?? ""; FiltrarFacturas(); })" 
-                                   Placeholder="Ej: FAC-2026, Textiles, Café, 0501..." Class="w-100" />
+                                   Placeholder="Ej: 001-001-01, PROF-2026, Textiles, Café, 0501..." Class="w-100" />
                 </RadzenFormField>
             </RadzenColumn>
 
@@ -307,8 +307,10 @@
                         <RadzenDataGridColumn TItem="FacturaCobro" Title="Acciones / Flujo" Width="230px" TextAlign="TextAlign.Center">
                             <Template Context="f">
                                 <div class="d-flex justify-content-center flex-wrap gap-1">
-                                    <RadzenButton Icon="print" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
-                                                  Text="Imprimir" Click="@(() => ImprimirFacturaDirecta(f))" title="Imprimir Factura Fiscal SAR o Proforma" />
+                                    <a href="/facturacion/imprimir/@f.Id" target="_blank" class="rz-button rz-button-xs rz-variant-flat rz-light text-decoration-none d-inline-flex align-items-center gap-1" title="Abrir comprobante fiscal SAR (Tamaño Carta)">
+                                        <RadzenIcon Icon="print" Style="font-size: 0.85rem;" />
+                                        <span>Imprimir</span>
+                                    </a>
 
                                     @if (f.Estado == EstadoFactura.Borrador)
                                     {
@@ -317,7 +319,7 @@
                                         <RadzenButton Icon="check_circle" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
                                                       Text="Emitir" Click="@(() => AprobarFacturaDirecta(f))" title="Aprobar y Emitir Factura Oficial SAR" />
                                         <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
-                                                      Click="@(() => VerDetalleFactura(f))" title="Ver Proforma" />
+                                                      Click="@(async () => await VerDetalleFactura(f))" title="Ver Proforma" />
                                         <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.ExtraSmall" 
                                                       Click="@(() => EliminarBorrador(f))" title="Descartar Borrador" />
                                     }
@@ -328,14 +330,14 @@
                                         <RadzenButton Icon="undo" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
                                                       Text="Devolver" Click="@(() => AbrirModalDevolver(f))" title="Devolver a Borrador para Correcciones" />
                                         <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
-                                                      Click="@(() => VerDetalleFactura(f))" title="Revisar Proforma" />
+                                                      Click="@(async () => await VerDetalleFactura(f))" title="Revisar Proforma" />
                                     }
                                     else if (f.Estado == EstadoFactura.Emitida || f.Estado == EstadoFactura.Parcial)
                                     {
                                         <RadzenButton Icon="payments" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
                                                       Text="Cobrar" Click="@(() => AbrirModalCobro(f))" title="Registrar Cobro / Abono" />
                                         <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
-                                                      Click="@(() => VerDetalleFactura(f))" title="Ver Comprobante Oficial" />
+                                                      Click="@(async () => await VerDetalleFactura(f))" title="Ver Comprobante Oficial" />
                                         @if (f.MontoPagado == 0)
                                         {
                                             <RadzenButton Icon="cancel" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.ExtraSmall" 
@@ -345,19 +347,19 @@
                                     else if (f.Estado == EstadoFactura.Pagada)
                                     {
                                         <RadzenButton Icon="verified" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
-                                                      Text="P360 Recibo" Click="@(() => VerDetalleFactura(f))" title="Ver Comprobante Oficial P360" />
+                                                      Text="P360 Recibo" Click="@(async () => await VerDetalleFactura(f))" title="Ver Comprobante Oficial P360" />
                                     }
                                     else if (f.Estado == EstadoFactura.Rechazada)
                                     {
                                         <RadzenButton Icon="refresh" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
                                                       Text="Reactivar" Click="@(() => ReactivarBorrador(f))" title="Reactivar como Borrador" />
                                         <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
-                                                      Click="@(() => VerDetalleFactura(f))" />
+                                                      Click="@(async () => await VerDetalleFactura(f))" />
                                     }
                                     else
                                     {
                                         <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
-                                                      Click="@(() => VerDetalleFactura(f))" />
+                                                      Click="@(async () => await VerDetalleFactura(f))" />
                                     }
                                 </div>
                             </Template>
@@ -730,14 +732,43 @@
                         @(facturaDetalle.EsProforma ? "Documento Proforma / Presupuesto: " : "Factura Fiscal Oficial (Régimen SAR): ") @facturaDetalle.NumeroFactura
                     </h5>
                     <div class="d-flex align-items-center gap-2">
-                        <RadzenButton Icon="open_in_new" Text="Abrir en Pestaña" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" 
-                                      Click="@(() => NavigationManager.NavigateTo($"/facturacion/imprimir/{facturaDetalle.Id}", true))" title="Abrir en página completa para imprimir o guardar" />
-                        <RadzenButton Icon="print" Text="Imprimir Factura (SAR)" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" 
-                                      Click="@ImprimirComprobante" Class="fw-bold shadow-sm" />
+                        <a href="/facturacion/imprimir/@facturaDetalle.Id" target="_blank" class="rz-button rz-button-sm rz-variant-flat rz-light text-decoration-none d-inline-flex align-items-center gap-1" title="Abrir en página completa para imprimir o guardar">
+                            <RadzenIcon Icon="open_in_new" Style="font-size: 0.9rem;" />
+                            <span>Abrir en Pestaña</span>
+                        </a>
+                        @if (validacionModalSAR != null && !validacionModalSAR.EsValido)
+                        {
+                            <button type="button" class="rz-button rz-button-sm rz-variant-flat rz-danger" disabled title="@validacionModalSAR.MensajeError">
+                                <RadzenIcon Icon="block" Style="font-size: 0.9rem;" />
+                                <span>Impresión Bloqueada (SAR)</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <a href="/facturacion/imprimir/@facturaDetalle.Id" target="_blank" class="rz-button rz-button-sm rz-variant-flat rz-primary text-decoration-none d-inline-flex align-items-center gap-1 fw-bold shadow-sm" title="Imprimir Comprobante Fiscal SAR (Tamaño Carta)">
+                                <RadzenIcon Icon="print" Style="font-size: 0.9rem;" />
+                                <span>Imprimir Factura (SAR)</span>
+                            </a>
+                        }
                         <button type="button" class="btn-close btn-close-white" @onclick="@(() => mostrarModalDetalle = false)"></button>
                     </div>
                 </div>
                 <div class="modal-body p-2 p-md-3 bg-white" id="seccion-comprobante-fiscal">
+                    <!-- AVISO DE INFRACCIÓN SAR SI NO ES VÁLIDA -->
+                    @if (validacionModalSAR != null && !validacionModalSAR.EsValido)
+                    {
+                        <div class="alert alert-danger border border-2 border-danger d-flex align-items-start gap-3 p-3 mb-2 shadow-sm rounded-3 no-print">
+                            <RadzenIcon Icon="gpp_bad" Style="font-size: 2rem; color: #dc3545;" Class="mt-1" />
+                            <div>
+                                <h6 class="fw-bold text-danger mb-1">⛔ IMPRESIÓN Y VALIDEZ BLOQUEADA: INFRACCIÓN FISCAL SAR</h6>
+                                <div class="text-dark fw-bold mb-1">@validacionModalSAR.MensajeError</div>
+                                <div class="small text-muted">
+                                    <strong>Fundamento Legal:</strong> El comprobante excede el rango máximo autorizado (@(validacionModalSAR.CorrelativoMaximo.ToString("D8"))) o supera la Fecha Límite de Emisión autorizada (@(validacionModalSAR.FechaLimite?.ToString("dd/MM/yyyy") ?? "")).
+                                </div>
+                            </div>
+                        </div>
+                    }
+
                     <!-- AVISO DE ESTADO PROFORMA SI APLICA -->
                     @if (facturaDetalle.EsProforma)
                     {
@@ -802,11 +833,19 @@
                                                     </span>
                                                 </div>
                                                 <div class="mb-1" style="font-size: 7pt;">
-                                                    <strong class="text-muted">Rango:</strong> @rangoAutorizado
+                                                    <strong class="text-muted">Rango:</strong> 
+                                                    <span class="@(validacionModalSAR?.RangoExcedido == true ? "text-danger fw-bold" : "")">@rangoAutorizado</span>
                                                 </div>
                                                 <div style="font-size: 7.5pt;">
-                                                    <strong class="text-muted">Límite Emisión:</strong> <strong class="text-danger">@fechaLimiteEmision</strong>
+                                                    <strong class="text-muted">Límite Emisión:</strong> 
+                                                    <strong class="@(validacionModalSAR?.FechaLimiteExpirada == true ? "text-danger bg-danger bg-opacity-10 px-1" : "text-danger")">@fechaLimiteEmision</strong>
                                                 </div>
+                                                @if (validacionModalSAR != null && !validacionModalSAR.EsValido)
+                                                {
+                                                    <div class="badge bg-danger text-white w-100 mt-1 py-1 font-monospace" style="font-size: 6.5pt;">
+                                                        ⛔ BLOQUEADO: @(validacionModalSAR.RangoExcedido ? "RANGO SAR EXCEDIDO" : "FECHA LÍMITE EXPIRADA")
+                                                    </div>
+                                                }
                                             </div>
                                         }
                                         else
@@ -1077,9 +1116,24 @@
                         }
                     </div>
                     <div class="d-flex gap-2">
-                        <RadzenButton Icon="open_in_new" Text="Abrir en Pestaña" ButtonStyle="ButtonStyle.Light" 
-                                      Click="@(() => NavigationManager.NavigateTo($"/facturacion/imprimir/{facturaDetalle.Id}", true))" title="Abrir vista de impresión en página completa" />
-                        <RadzenButton Icon="print" Text="Imprimir Factura Fiscal SAR" ButtonStyle="ButtonStyle.Primary" Click="@ImprimirComprobante" Class="fw-bold px-3 shadow-sm" />
+                        <a href="/facturacion/imprimir/@facturaDetalle.Id" target="_blank" class="rz-button rz-button-md rz-variant-flat rz-light text-decoration-none d-inline-flex align-items-center gap-1" title="Abrir vista de impresión en página completa">
+                            <RadzenIcon Icon="open_in_new" Style="font-size: 1rem;" />
+                            <span>Abrir en Pestaña</span>
+                        </a>
+                        @if (validacionModalSAR != null && !validacionModalSAR.EsValido)
+                        {
+                            <button type="button" class="rz-button rz-button-md rz-variant-flat rz-danger" disabled title="@validacionModalSAR.MensajeError">
+                                <RadzenIcon Icon="block" Style="font-size: 1rem;" />
+                                <span>Impresión Bloqueada (Infracción SAR)</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <a href="/facturacion/imprimir/@facturaDetalle.Id" target="_blank" class="rz-button rz-button-md rz-variant-flat rz-primary text-decoration-none d-inline-flex align-items-center gap-1 fw-bold px-3 shadow-sm" title="Imprimir Comprobante Fiscal SAR en tamaño carta">
+                                <RadzenIcon Icon="print" Style="font-size: 1rem;" />
+                                <span>Imprimir Factura Fiscal SAR</span>
+                            </a>
+                        }
                         <RadzenButton Text="Cerrar" ButtonStyle="ButtonStyle.Light" Click="@(() => mostrarModalDetalle = false)" />
                     </div>
                 </div>
@@ -1483,6 +1537,7 @@
     private string caiAutorizado = "A84F2B-98CE21-1B4480-1498B2-FA8321-44";
     private string rangoAutorizado = "001-001-01-00000001 al 001-001-01-00050000";
     private string fechaLimiteEmision = "31/12/2027";
+    private ValidacionFiscalSARResult? validacionModalSAR;
 
     private record OpcionEstado(int Valor, string Nombre);
     private List<OpcionEstado> opcionesEstados = new()
@@ -1747,10 +1802,17 @@
 
         if (confirmado == true)
         {
-            var facturaEmitida = await FacturacionService.AprobarFacturaAsync(f.Id, "Socio Director");
-            NotificationService.Notify(NotificationSeverity.Success, "Factura Emitida SAR", 
-                $"La proforma fue aprobada y timbrada con el correlativo {facturaEmitida.NumeroFactura}.");
-            await CargarDatos();
+            try
+            {
+                var facturaEmitida = await FacturacionService.AprobarFacturaAsync(f.Id, "Socio Director");
+                NotificationService.Notify(NotificationSeverity.Success, "Factura Emitida SAR", 
+                    $"La proforma fue aprobada y timbrada con el correlativo {facturaEmitida.NumeroFactura}.");
+                await CargarDatos();
+            }
+            catch (Exception ex)
+            {
+                NotificationService.Notify(NotificationSeverity.Error, "Bloqueo Fiscal SAR", ex.Message, 8000);
+            }
         }
     }
 
@@ -1817,9 +1879,17 @@
         }
     }
 
-    private void VerDetalleFactura(FacturaCobro f)
+    private async Task VerDetalleFactura(FacturaCobro f)
     {
         facturaDetalle = f;
+        if (!f.EsProforma)
+        {
+            validacionModalSAR = await FacturacionService.ValidarCumplimientoFiscalSARAsync(f.NumeroFactura, f.FechaEmision);
+        }
+        else
+        {
+            validacionModalSAR = null;
+        }
         mostrarModalDetalle = true;
     }
 
@@ -1827,8 +1897,18 @@
     {
         if (tipoEmisionSeleccionada == EstadoFactura.Emitida)
         {
-            nuevaFactura.NumeroFactura = $"FAC-2026-{(facturas.Count(f => !f.EsProforma) + 1):D4}";
-            nuevaFactura.NumeroCAI = await FacturacionService.GetParametroStringAsync("CAI_SAR_AUTORIZADO", "A84F2B-98CE21-1B4480-1498B2-FA8321-44");
+            try
+            {
+                nuevaFactura.NumeroFactura = await FacturacionService.GenerarSiguienteNumeroFacturaSARAsync();
+                nuevaFactura.NumeroCAI = await FacturacionService.GetParametroStringAsync("CAI_SAR_AUTORIZADO", "A84F2B-98CE21-1B4480-1498B2-FA8321-44");
+            }
+            catch (Exception ex)
+            {
+                NotificationService.Notify(NotificationSeverity.Error, "Bloqueo Fiscal SAR", ex.Message, 8000);
+                tipoEmisionSeleccionada = EstadoFactura.Borrador;
+                nuevaFactura.NumeroFactura = $"PROF-2026-{(facturas.Count(f => f.EsProforma) + 1):D4}";
+                nuevaFactura.NumeroCAI = null;
+            }
         }
         else
         {
@@ -1985,9 +2065,9 @@
         nuevaFactura.Estado = estadoDestino;
         if (estadoDestino == EstadoFactura.Emitida)
         {
-            if (string.IsNullOrEmpty(nuevaFactura.NumeroFactura) || nuevaFactura.NumeroFactura.StartsWith("PROF-"))
+            if (string.IsNullOrEmpty(nuevaFactura.NumeroFactura) || nuevaFactura.NumeroFactura.StartsWith("PROF-") || nuevaFactura.NumeroFactura.StartsWith("FAC-"))
             {
-                nuevaFactura.NumeroFactura = $"FAC-2026-{(facturas.Count(f => !f.EsProforma) + 1):D4}";
+                nuevaFactura.NumeroFactura = await FacturacionService.GenerarSiguienteNumeroFacturaSARAsync();
             }
             if (string.IsNullOrEmpty(nuevaFactura.NumeroCAI))
             {
@@ -1999,26 +2079,33 @@
         else
         {
             nuevaFactura.SolicitadoPor = "Abg. Especialista";
-            if (string.IsNullOrEmpty(nuevaFactura.NumeroFactura) || nuevaFactura.NumeroFactura.StartsWith("FAC-"))
+            if (string.IsNullOrEmpty(nuevaFactura.NumeroFactura) || !nuevaFactura.NumeroFactura.StartsWith("PROF-"))
             {
                 nuevaFactura.NumeroFactura = $"PROF-2026-{(facturas.Count(f => f.EsProforma) + 1):D4}";
             }
             nuevaFactura.NumeroCAI = null;
         }
 
-        await FacturacionService.GuardarFacturaAsync(nuevaFactura, "Abg. Administrador");
-        
-        string msg = estadoDestino switch
+        try
         {
-            EstadoFactura.Borrador => $"Proforma {nuevaFactura.NumeroFactura} guardada en borrador.",
-            EstadoFactura.PendienteAprobacion => $"Proforma {nuevaFactura.NumeroFactura} enviada a revisión de socios.",
-            EstadoFactura.Emitida => $"Factura oficial SAR {nuevaFactura.NumeroFactura} emitida exitosamente.",
-            _ => $"Documento {nuevaFactura.NumeroFactura} guardado."
-        };
+            await FacturacionService.GuardarFacturaAsync(nuevaFactura, "Abg. Administrador");
+            
+            string msg = estadoDestino switch
+            {
+                EstadoFactura.Borrador => $"Proforma {nuevaFactura.NumeroFactura} guardada en borrador.",
+                EstadoFactura.PendienteAprobacion => $"Proforma {nuevaFactura.NumeroFactura} enviada a revisión de socios.",
+                EstadoFactura.Emitida => $"Factura oficial SAR {nuevaFactura.NumeroFactura} emitida exitosamente.",
+                _ => $"Documento {nuevaFactura.NumeroFactura} guardado."
+            };
 
-        NotificationService.Notify(NotificationSeverity.Success, "Operación Exitosa", msg);
-        mostrarModalNuevaFactura = false;
-        await CargarDatos();
+            NotificationService.Notify(NotificationSeverity.Success, "Operación Exitosa", msg);
+            mostrarModalNuevaFactura = false;
+            await CargarDatos();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Bloqueo Fiscal SAR", ex.Message, 8000);
+        }
     }
 
     private void AgregarLineaManual()
@@ -2045,15 +2132,14 @@
 
     private async Task ImprimirFacturaDirecta(FacturaCobro f)
     {
-        facturaDetalle = f;
-        mostrarModalDetalle = true;
-        StateHasChanged();
-        await Task.Delay(250);
-        await JSRuntime.InvokeVoidAsync("window.print");
+        await JSRuntime.InvokeVoidAsync("window.open", $"/facturacion/imprimir/{f.Id}", "_blank");
     }
 
     private async Task ImprimirComprobante()
     {
-        await JSRuntime.InvokeVoidAsync("window.print");
+        if (facturaDetalle != null)
+        {
+            await JSRuntime.InvokeVoidAsync("window.open", $"/facturacion/imprimir/{facturaDetalle.Id}", "_blank");
+        }
     }
 }

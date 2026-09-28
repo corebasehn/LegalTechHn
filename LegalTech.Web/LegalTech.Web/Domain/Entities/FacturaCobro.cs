@@ -13,7 +13,7 @@ public class FacturaCobro
     public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>
-    /// Número correlativo o fiscal (ej: FAC-2026-0001, 000-001-01-00045812)
+    /// Número correlativo fiscal según rango SAR (ej: 001-001-01-00000001) o identificador de proforma (ej: PROF-2026-0001).
     /// </summary>
     public string NumeroFactura { get; set; } = string.Empty;
 
