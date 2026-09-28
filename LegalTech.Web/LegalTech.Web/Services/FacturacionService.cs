@@ -558,13 +558,23 @@ public class FacturacionService
             {
                 db.Entry(existente).CurrentValues.SetValues(factura);
 
-                // Reemplazar detalles
+                // Reemplazar detalles creando instancias con Id único para evitar conflictos de rastreo en EF Core
                 db.DetallesFactura.RemoveRange(existente.Detalles);
                 foreach (var d in factura.Detalles)
                 {
-                    d.FacturaId = factura.Id;
-                    if (d.Id == Guid.Empty) d.Id = Guid.NewGuid();
-                    db.DetallesFactura.Add(d);
+                    db.DetallesFactura.Add(new DetalleFacturaCobro
+                    {
+                        Id = Guid.NewGuid(),
+                        FacturaId = factura.Id,
+                        TarifaArancelariaId = d.TarifaArancelariaId,
+                        Concepto = d.Concepto,
+                        EsGastoOficial = d.EsGastoOficial,
+                        Cantidad = d.Cantidad,
+                        PrecioUnitario = d.PrecioUnitario,
+                        Subtotal = d.Subtotal,
+                        MontoISV = d.MontoISV,
+                        TotalLinea = d.TotalLinea
+                    });
                 }
             }
             else
@@ -595,6 +605,7 @@ public class FacturacionService
 
         factura.Estado = EstadoFactura.PendienteAprobacion;
         factura.SolicitadoPor = usuario;
+        factura.MotivoRechazo = null; // Limpiar motivo anterior al reenviar a revisión
         await db.SaveChangesAsync();
     }
 

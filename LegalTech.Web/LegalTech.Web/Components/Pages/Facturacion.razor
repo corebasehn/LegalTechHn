@@ -1,9 +1,12 @@
 @page "/facturacion"
 @attribute [Authorize(Roles = "SocioDirector,Finanzas,AbogadoSenior")]
 @rendermode InteractiveServer
+@implements IDisposable
 @using LegalTech.Web.Domain.Entities
 @using LegalTech.Web.Domain.Enums
 @using LegalTech.Web.Services
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
 @inject FacturacionService FacturacionService
 @inject ClienteService ClienteService
 @inject ExpedienteService ExpedienteService
@@ -11,6 +14,8 @@
 @inject DialogService DialogService
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NotificacionesAppService NotificacionesService
 
 <PageTitle>Facturación, Aranceles y Solvencia P360 - LegalTech Honduras</PageTitle>
 
@@ -18,11 +23,23 @@
     <!-- 1. ENCABEZADO PRINCIPAL -->
     <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3">
         <div>
-            <div class="d-flex align-items-center gap-2 mb-1">
+            <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
                 <RadzenText TextStyle="TextStyle.H5" TagName="TagName.H1" Class="m-0 text-primary fw-bold">
                     <RadzenIcon Icon="receipt_long" Class="me-1 text-success" /> Facturación, Aranceles y Solvencia P360
                 </RadzenText>
                 <span class="badge bg-success text-white px-2 py-1">Finanzas de PI</span>
+                @if (puedeAprobarFacturas)
+                {
+                    <span class="badge bg-warning text-dark px-2 py-1 border border-warning" title="Rol autorizado para emitir y autorizar timbrado SAR">
+                        <RadzenIcon Icon="verified_user" Style="font-size: 0.8rem;" Class="me-1" />Aprobador SAR Habilitado
+                    </span>
+                }
+                else
+                {
+                    <span class="badge bg-primary text-white px-2 py-1" title="Elaboración y envío de proformas a revisión">
+                        <RadzenIcon Icon="edit_note" Style="font-size: 0.8rem;" Class="me-1" />Elaboración de Proformas
+                    </span>
+                }
             </div>
             <RadzenText TextStyle="TextStyle.Caption" Class="text-muted m-0">
                 Separación contable de gastos oficiales exentos vs. honorarios gravados (ISV 15%) y control infranqueable de solvencia (Párrafo 360 del Manual)
@@ -38,68 +55,108 @@
         </div>
     </div>
 
-    <!-- 2. FRANJA EJECUTIVA DE INDICADORES CLAVE (FINANZAS Y P360) -->
-    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-5 g-2 mb-3">
-        <!-- 1. FACTURACIÓN EMITIDA -->
-        <div class="col">
-            <RadzenCard Class="p-3 bg-white shadow-sm border-0 h-100 d-flex align-items-center justify-content-between">
+    <!-- 2. FRANJA EJECUTIVA DE INDICADORES CLAVE Y FILTRADO INTERACTIVO (FINANZAS Y P360) -->
+    <RadzenRow Gap="0.75rem" Class="mb-3">
+        <!-- 1. TODAS LAS FACTURAS Y PROFORMAS -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroCard("todos"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between h-100" 
+                        Style="@ObtenerEstiloCard("todos", "#0d6efd")">
                 <div>
-                    <span class="text-muted small d-block">Facturas Emitidas (SAR)</span>
-                    <strong class="fs-5 text-dark">L. @totalFacturadoHNL.ToString("N2")</strong>
-                    <span class="text-muted small d-block">@facturas.Count(f => !f.EsProforma && f.Estado != EstadoFactura.Anulada) timbradas</span>
+                    <span class="text-muted small d-block">📁 Todas</span>
+                    <strong class="fs-4 text-dark">@facturas.Count</strong>
+                    <span class="text-muted small d-block">Registros totales</span>
                 </div>
                 <RadzenIcon Icon="receipt_long" Class="text-primary fs-2" />
             </RadzenCard>
-        </div>
+        </RadzenColumn>
 
-        <!-- 2. TOTAL COBRADO -->
-        <div class="col">
-            <RadzenCard Class="p-3 bg-white shadow-sm border-0 h-100 d-flex align-items-center justify-content-between">
+        <!-- 2. FACTURACIÓN EMITIDA (SAR) -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroCard("emitidas"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between h-100" 
+                        Style="@ObtenerEstiloCard("emitidas", "#0b5ed7")">
+                <div>
+                    <span class="text-muted small d-block">📜 Emitidas (SAR)</span>
+                    <strong class="fs-4 text-dark">@facturas.Count(f => !f.EsProforma && f.Estado != EstadoFactura.Anulada)</strong>
+                    <span class="text-muted small d-block">L. @totalFacturadoHNL.ToString("N2")</span>
+                </div>
+                <RadzenIcon Icon="receipt" Class="text-primary fs-2" />
+            </RadzenCard>
+        </RadzenColumn>
+
+        <!-- 3. TOTAL COBRADO -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroCard("cobradas"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between h-100" 
+                        Style="@ObtenerEstiloCard("cobradas", "var(--rz-success, #198754)")">
                 <div>
                     <span class="text-success small d-block fw-semibold">🟢 Total Cobrado</span>
-                    <strong class="fs-5 text-success">L. @totalCobradoHNL.ToString("N2")</strong>
-                    <span class="text-muted small d-block">@facturas.Count(f => f.Estado == EstadoFactura.Pagada) saldadas</span>
+                    <strong class="fs-4 text-success">@facturas.Count(f => f.Estado == EstadoFactura.Pagada)</strong>
+                    <span class="text-muted small d-block">L. @totalCobradoHNL.ToString("N2")</span>
                 </div>
                 <RadzenIcon Icon="check_circle" Class="text-success fs-2" />
             </RadzenCard>
-        </div>
+        </RadzenColumn>
 
-        <!-- 3. CUENTAS POR COBRAR -->
-        <div class="col">
-            <RadzenCard Class="p-3 bg-white shadow-sm border-0 h-100 d-flex align-items-center justify-content-between border-start border-4 border-danger">
+        <!-- 4. CUENTAS POR COBRAR (SALDO PENDIENTE) -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroCard("por_cobrar"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between h-100" 
+                        Style="@ObtenerEstiloCard("por_cobrar", "var(--rz-danger, #dc3545)")">
                 <div>
-                    <span class="text-danger small d-block fw-semibold">🔴 Por Cobrar (Saldo)</span>
-                    <strong class="fs-5 text-danger">L. @totalSaldoPendienteHNL.ToString("N2")</strong>
-                    <span class="text-muted small d-block">@totalFacturasConSaldo con saldo</span>
+                    <span class="text-danger small d-block fw-semibold">🔴 Por Cobrar</span>
+                    <strong class="fs-4 text-danger">@totalFacturasConSaldo</strong>
+                    <span class="text-muted small d-block">L. @totalSaldoPendienteHNL.ToString("N2")</span>
                 </div>
                 <RadzenIcon Icon="pending_actions" Class="text-danger fs-2" />
             </RadzenCard>
-        </div>
+        </RadzenColumn>
 
-        <!-- 4. PROFORMAS Y BORRADORES -->
-        <div class="col">
-            <RadzenCard Class="p-3 bg-white shadow-sm border-0 h-100 d-flex align-items-center justify-content-between border-start border-4 border-warning">
+        <!-- 5. PROFORMAS Y BORRADORES -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroCard("proformas"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between h-100" 
+                        Style="@ObtenerEstiloCard("proformas", "var(--rz-warning, #ffc107)")">
                 <div>
-                    <span class="text-warning-emphasis small d-block fw-semibold">📝 Proformas / Borrador</span>
-                    <strong class="fs-5 text-dark">L. @totalProformasHNL.ToString("N2")</strong>
-                    <span class="text-muted small d-block">@totalProformasCount en revisión/borrador</span>
+                    <span class="text-warning-emphasis small d-block fw-semibold">📝 Proformas</span>
+                    <strong class="fs-4 text-dark">@totalProformasCount</strong>
+                    <span class="text-muted small d-block">L. @totalProformasHNL.ToString("N2")</span>
                 </div>
                 <RadzenIcon Icon="edit_note" Class="text-warning fs-2" />
             </RadzenCard>
-        </div>
+        </RadzenColumn>
 
-        <!-- 5. SOLVENCIA P360 -->
-        <div class="col">
-            <RadzenCard Class="p-3 bg-white shadow-sm border-0 h-100 d-flex align-items-center justify-content-between border-start border-4 border-info">
+        <!-- 6. SOLVENCIA P360 -->
+        <RadzenColumn Size="12" SizeSM="6" SizeMD="4" SizeLG="2">
+            <RadzenCard @onclick="@(() => SeleccionarFiltroCard("solventes"))" 
+                        Class="p-2 p-md-3 bg-white shadow-sm d-flex align-items-center justify-content-between h-100" 
+                        Style="@ObtenerEstiloCard("solventes", "var(--rz-info, #0dcaf0)")">
                 <div>
                     <span class="text-info small d-block fw-semibold">🛡️ Solvencia P360</span>
-                    <strong class="fs-5 text-info">@expedientesSolventes P360</strong>
-                    <span class="text-muted small d-block">Títulos autorizados</span>
+                    <strong class="fs-4 text-info">@expedientesSolventes</strong>
+                    <span class="text-muted small d-block">Al día / Títulos OK</span>
                 </div>
                 <RadzenIcon Icon="verified" Class="text-info fs-2" />
             </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <!-- BANNER DE FILTRO ACTIVO POR CARD -->
+    @if (filtroRapidoCard != "todos")
+    {
+        <div class="alert alert-light border py-2 px-3 d-flex align-items-center justify-content-between mb-3 shadow-sm rounded">
+            <div class="d-flex align-items-center gap-2">
+                <RadzenIcon Icon="filter_alt" Class="text-primary" />
+                <span>
+                    Filtro activo: <b>@ObtenerTituloFiltroCard()</b> &mdash; 
+                    Mostrando <span class="badge bg-primary">@facturasFiltradas.Count</span> de @facturas.Count registros
+                </span>
+            </div>
+            <RadzenButton Icon="close" Text="Quitar filtro (Ver todas)" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                          Click="@(() => SeleccionarFiltroCard("todos"))" Class="shadow-none border" />
         </div>
-    </div>
+    }
 
     @if (ExpedienteId.HasValue && expedienteFiltro != null)
     {
@@ -128,7 +185,7 @@
 
             <RadzenColumn Size="12" SizeSM="4" SizeMD="3">
                 <RadzenFormField Text="Estado de Cobro" Class="w-100">
-                    <RadzenDropDown @bind-Value="filtroEstado" Data="@opcionesEstados" TextProperty="Nombre" ValueProperty="Valor" Change="@FiltrarFacturas" Class="w-100" />
+                    <RadzenDropDown @bind-Value="filtroEstado" Data="@opcionesEstados" TextProperty="Nombre" ValueProperty="Valor" Change="@OnFiltroEstadoChanged" Class="w-100" />
                 </RadzenFormField>
             </RadzenColumn>
 
@@ -162,6 +219,48 @@
                                 AllowSorting="true" EmptyText="No se encontraron comprobantes o facturas con los filtros seleccionados." 
                                 Class="w-100 table-sm" Style="min-width: 1100px;">
                     <Columns>
+                        <!-- ACCIONES (PRIMERA COLUMNA) -->
+                        <RadzenDataGridColumn TItem="FacturaCobro" Title="Acciones" Width="140px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                            <Template Context="f">
+                                <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                   Click="@(async (RadzenSplitButtonItem args) => await ManejarAccionFactura(args, f))">
+                                    <ChildContent>
+                                        <RadzenSplitButtonItem Text="Ver Detalle" Value="ver" Icon="visibility" />
+                                        <RadzenSplitButtonItem Text="Imprimir SAR" Value="imprimir" Icon="print" />
+                                        @if (f.Estado == EstadoFactura.Borrador || f.Estado == EstadoFactura.Rechazada)
+                                        {
+                                            @if (!puedeAprobarFacturas)
+                                            {
+                                                <RadzenSplitButtonItem Text="Editar Proforma" Value="editar" Icon="edit" />
+                                                <RadzenSplitButtonItem Text="Enviar a Revisión" Value="enviar" Icon="send" />
+                                                <RadzenSplitButtonItem Text="Descartar Borrador" Value="eliminar" Icon="delete" />
+                                            }
+                                        }
+                                        else if (f.Estado == EstadoFactura.PendienteAprobacion)
+                                        {
+                                            @if (puedeAprobarFacturas)
+                                            {
+                                                <RadzenSplitButtonItem Text="Aprobar SAR" Value="aprobar" Icon="check_circle" />
+                                                <RadzenSplitButtonItem Text="Devolver a Borrador" Value="devolver" Icon="undo" />
+                                            }
+                                        }
+                                        else if (f.Estado == EstadoFactura.Emitida || f.Estado == EstadoFactura.Parcial)
+                                        {
+                                            <RadzenSplitButtonItem Text="Registrar Cobro" Value="cobrar" Icon="payments" />
+                                            @if (f.MontoPagado == 0 && puedeAprobarFacturas)
+                                            {
+                                                <RadzenSplitButtonItem Text="Anular Factura" Value="anular" Icon="cancel" />
+                                            }
+                                        }
+                                        else if (f.Estado == EstadoFactura.Pagada)
+                                        {
+                                            <RadzenSplitButtonItem Text="Recibo P360" Value="ver" Icon="verified" />
+                                        }
+                                    </ChildContent>
+                                </RadzenSplitButton>
+                            </Template>
+                        </RadzenDataGridColumn>
+
                         <!-- 1. COMPROBANTE / CAI -->
                         <RadzenDataGridColumn TItem="FacturaCobro" Title="No. Documento / CAI" Width="190px">
                             <Template Context="f">
@@ -271,6 +370,13 @@
                                     <span class="badge @ObtenerBadgeClaseEstado(f.Estado)">
                                         @ObtenerTextoEstado(f.Estado)
                                     </span>
+                                    @if (!string.IsNullOrEmpty(f.MotivoRechazo) && f.EsProforma)
+                                    {
+                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger d-inline-block text-truncate" 
+                                              style="max-width: 175px; font-size: 0.65rem;" title="@f.MotivoRechazo">
+                                            ⚠️ Observaciones: @f.MotivoRechazo
+                                        </span>
+                                    }
                                     @if (!string.IsNullOrEmpty(f.SolicitadoPor) && f.EsProforma)
                                     {
                                         <span class="text-muted" style="font-size: 0.68rem;" title="Elaborado por">Por: @f.SolicitadoPor</span>
@@ -299,68 +405,6 @@
                                                 ⛔ Bloqueado P360
                                             </span>
                                         }
-                                    }
-                                </div>
-                            </Template>
-                        </RadzenDataGridColumn>
-
-                        <!-- 7. ACCIONES Y FLUJO DE APROBACIÓN -->
-                        <RadzenDataGridColumn TItem="FacturaCobro" Title="Acciones / Flujo" Width="230px" TextAlign="TextAlign.Center">
-                            <Template Context="f">
-                                <div class="d-flex justify-content-center flex-wrap gap-1">
-                                    <a href="/facturacion/imprimir/@f.Id" target="_blank" class="rz-button rz-button-xs rz-variant-flat rz-light text-decoration-none d-inline-flex align-items-center gap-1" title="Abrir comprobante fiscal SAR (Tamaño Carta)">
-                                        <RadzenIcon Icon="print" Style="font-size: 0.85rem;" />
-                                        <span>Imprimir</span>
-                                    </a>
-
-                                    @if (f.Estado == EstadoFactura.Borrador)
-                                    {
-                                        <RadzenButton Icon="send" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
-                                                      Text="A Revisión" Click="@(() => EnviarFacturaAAprobacion(f))" title="Enviar a Revisión de Socio" />
-                                        <RadzenButton Icon="check_circle" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
-                                                      Text="Emitir" Click="@(() => AprobarFacturaDirecta(f))" title="Aprobar y Emitir Factura Oficial SAR" />
-                                        <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
-                                                      Click="@(async () => await VerDetalleFactura(f))" title="Ver Proforma" />
-                                        <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.ExtraSmall" 
-                                                      Click="@(() => EliminarBorrador(f))" title="Descartar Borrador" />
-                                    }
-                                    else if (f.Estado == EstadoFactura.PendienteAprobacion)
-                                    {
-                                        <RadzenButton Icon="check_circle" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
-                                                      Text="Aprobar SAR" Click="@(() => AprobarFacturaDirecta(f))" title="Aprobar y Emitir Factura Fiscal SAR" />
-                                        <RadzenButton Icon="undo" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
-                                                      Text="Devolver" Click="@(() => AbrirModalDevolver(f))" title="Devolver a Borrador para Correcciones" />
-                                        <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
-                                                      Click="@(async () => await VerDetalleFactura(f))" title="Revisar Proforma" />
-                                    }
-                                    else if (f.Estado == EstadoFactura.Emitida || f.Estado == EstadoFactura.Parcial)
-                                    {
-                                        <RadzenButton Icon="payments" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
-                                                      Text="Cobrar" Click="@(() => AbrirModalCobro(f))" title="Registrar Cobro / Abono" />
-                                        <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
-                                                      Click="@(async () => await VerDetalleFactura(f))" title="Ver Comprobante Oficial" />
-                                        @if (f.MontoPagado == 0)
-                                        {
-                                            <RadzenButton Icon="cancel" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.ExtraSmall" 
-                                                          Click="@(() => ConfirmarAnular(f))" title="Anular Factura" />
-                                        }
-                                    }
-                                    else if (f.Estado == EstadoFactura.Pagada)
-                                    {
-                                        <RadzenButton Icon="verified" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
-                                                      Text="P360 Recibo" Click="@(async () => await VerDetalleFactura(f))" title="Ver Comprobante Oficial P360" />
-                                    }
-                                    else if (f.Estado == EstadoFactura.Rechazada)
-                                    {
-                                        <RadzenButton Icon="refresh" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
-                                                      Text="Reactivar" Click="@(() => ReactivarBorrador(f))" title="Reactivar como Borrador" />
-                                        <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
-                                                      Click="@(async () => await VerDetalleFactura(f))" />
-                                    }
-                                    else
-                                    {
-                                        <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
-                                                      Click="@(async () => await VerDetalleFactura(f))" />
                                     }
                                 </div>
                             </Template>
@@ -456,11 +500,23 @@
                 <div class="modal-header @(tipoEmisionSeleccionada == EstadoFactura.Emitida ? "bg-primary text-white" : "bg-warning text-dark") border-bottom">
                     <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
                         <RadzenIcon Icon="@(tipoEmisionSeleccionada == EstadoFactura.Emitida ? "receipt" : "edit_note")" /> 
-                        @(tipoEmisionSeleccionada == EstadoFactura.Emitida ? "Emitir Factura Fiscal Oficial (SAR)" : "Elaborar Proforma / Presupuesto en Borrador")
+                        @(esEdicionFactura 
+                            ? $"Editar Proforma: {nuevaFactura.NumeroFactura}" 
+                            : (tipoEmisionSeleccionada == EstadoFactura.Emitida ? "Emitir Factura Fiscal Oficial (SAR)" : "Elaborar Proforma / Presupuesto en Borrador"))
                     </h5>
                     <button type="button" class="btn-close @(tipoEmisionSeleccionada == EstadoFactura.Emitida ? "btn-close-white" : "")" @onclick="@(() => mostrarModalNuevaFactura = false)"></button>
                 </div>
                 <div class="modal-body p-3">
+                    @if (!string.IsNullOrEmpty(nuevaFactura.MotivoRechazo))
+                    {
+                        <div class="alert alert-danger border border-danger d-flex align-items-center gap-2 py-2 mb-3 shadow-sm rounded-3">
+                            <RadzenIcon Icon="assignment_return" Class="text-danger fs-4 flex-shrink-0" />
+                            <div>
+                                <strong class="text-danger d-block">Observaciones de Devolución por Finanzas / Dirección:</strong>
+                                <span class="small text-dark">@nuevaFactura.MotivoRechazo</span>
+                            </div>
+                        </div>
+                    }
                     <RadzenRow Gap="1rem" Class="mb-3">
                         <RadzenColumn Size="12" SizeMD="6">
                             <RadzenFormField Text="Cliente / Titular" Class="w-100">
@@ -658,13 +714,19 @@
                         {
                             <RadzenButton Text="Guardar Borrador" Icon="save" ButtonStyle="ButtonStyle.Secondary" 
                                           Click="@(() => GuardarFacturaConEstado(EstadoFactura.Borrador))" />
-                            <RadzenButton Text="Enviar a Revisión" Icon="send" ButtonStyle="ButtonStyle.Warning" 
-                                          Click="@(() => GuardarFacturaConEstado(EstadoFactura.PendienteAprobacion))" />
+                            @if (!puedeAprobarFacturas)
+                            {
+                                <RadzenButton Text="Enviar a Revisión" Icon="send" ButtonStyle="ButtonStyle.Warning" 
+                                              Click="@(() => GuardarFacturaConEstado(EstadoFactura.PendienteAprobacion))" />
+                            }
                         }
                         else if (tipoEmisionSeleccionada == EstadoFactura.PendienteAprobacion)
                         {
-                            <RadzenButton Text="Enviar a Revisión de Socio" Icon="send" ButtonStyle="ButtonStyle.Warning" 
-                                          Click="@(() => GuardarFacturaConEstado(EstadoFactura.PendienteAprobacion))" />
+                            @if (!puedeAprobarFacturas)
+                            {
+                                <RadzenButton Text="Enviar a Revisión de Socio" Icon="send" ButtonStyle="ButtonStyle.Warning" 
+                                              Click="@(() => GuardarFacturaConEstado(EstadoFactura.PendienteAprobacion))" />
+                            }
                             <RadzenButton Text="Guardar Borrador" Icon="save" ButtonStyle="ButtonStyle.Light" 
                                           Click="@(() => GuardarFacturaConEstado(EstadoFactura.Borrador))" />
                         }
@@ -1091,24 +1153,31 @@
                 </div>
                 <div class="modal-footer bg-light no-print d-flex justify-content-between">
                     <div class="d-flex gap-2">
-                        @if (facturaDetalle.Estado == EstadoFactura.Borrador)
+                        @if (facturaDetalle.Estado == EstadoFactura.Borrador || facturaDetalle.Estado == EstadoFactura.Rechazada)
                         {
-                            <RadzenButton Icon="send" Text="Enviar a Revisión" ButtonStyle="ButtonStyle.Warning" 
-                                          Click="@(async () => { mostrarModalDetalle = false; await EnviarFacturaAAprobacion(facturaDetalle); })" />
-                            <RadzenButton Icon="check_circle" Text="Aprobar y Emitir SAR" ButtonStyle="ButtonStyle.Success" 
-                                          Click="@(async () => { mostrarModalDetalle = false; await AprobarFacturaDirecta(facturaDetalle); })" />
+                            @if (!puedeAprobarFacturas)
+                            {
+                                <RadzenButton Icon="edit" Text="Editar Proforma" ButtonStyle="ButtonStyle.Secondary" 
+                                              Click="@(async () => { mostrarModalDetalle = false; await AbrirModalEditarFactura(facturaDetalle); })" />
+                                <RadzenButton Icon="send" Text="Enviar a Revisión" ButtonStyle="ButtonStyle.Warning" 
+                                              Click="@(async () => { mostrarModalDetalle = false; await EnviarFacturaAAprobacion(facturaDetalle); })" />
+                            }
                         }
                         else if (facturaDetalle.Estado == EstadoFactura.PendienteAprobacion)
                         {
-                            <RadzenButton Icon="check_circle" Text="Aprobar y Emitir SAR" ButtonStyle="ButtonStyle.Success" 
-                                          Click="@(async () => { mostrarModalDetalle = false; await AprobarFacturaDirecta(facturaDetalle); })" />
-                            <RadzenButton Icon="undo" Text="Devolver a Borrador" ButtonStyle="ButtonStyle.Warning" 
-                                          Click="@(() => { mostrarModalDetalle = false; AbrirModalDevolver(facturaDetalle); })" />
-                        }
-                        else if (facturaDetalle.Estado == EstadoFactura.Rechazada)
-                        {
-                            <RadzenButton Icon="refresh" Text="Reactivar Borrador" ButtonStyle="ButtonStyle.Warning" 
-                                          Click="@(async () => { mostrarModalDetalle = false; await ReactivarBorrador(facturaDetalle); })" />
+                            @if (puedeAprobarFacturas)
+                            {
+                                <RadzenButton Icon="check_circle" Text="Aprobar y Emitir SAR" ButtonStyle="ButtonStyle.Success" 
+                                              Click="@(async () => { mostrarModalDetalle = false; await AprobarFacturaDirecta(facturaDetalle); })" />
+                                <RadzenButton Icon="undo" Text="Devolver a Borrador" ButtonStyle="ButtonStyle.Warning" 
+                                              Click="@(() => { mostrarModalDetalle = false; AbrirModalDevolver(facturaDetalle); })" />
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning text-dark d-inline-flex align-items-center gap-1 p-2">
+                                    <RadzenIcon Icon="lock" Style="font-size: 0.95rem;" /> En revisión fiscal (Aprobación restringida a Finanzas / Dirección)
+                                </span>
+                            }
                         }
                         else if ((facturaDetalle.Estado == EstadoFactura.Emitida || facturaDetalle.Estado == EstadoFactura.Parcial) && facturaDetalle.SaldoPendiente > 0)
                         {
@@ -1484,6 +1553,7 @@
     private bool mostrarModalNuevaFactura = false;
     private bool mostrarModalDetalle = false;
     private bool mostrarModalDevolver = false;
+    private bool esEdicionFactura = false;
 
     private FacturaCobro? facturaSeleccionadaDevolver;
     private string motivoDevolucionIngresado = "";
@@ -1515,6 +1585,7 @@
     private int totalProformasCount = 0;
     private int expedientesSolventes = 0;
 
+    private string filtroRapidoCard = "todos";
     private string textoBusqueda = "";
     private int filtroEstado = 0;
     private string filtroMoneda = "Todas";
@@ -1570,9 +1641,68 @@
         "Efectivo"
     };
 
+    private bool puedeAprobarFacturas = false;
+    private string usuarioActualNombre = "Usuario Autorizado";
+    private string rolUsuarioActual = "";
+
     protected override async Task OnInitializedAsync()
     {
+        await EvaluarPermisosUsuario();
         await CargarDatos();
+        NotificacionesService.OnNotificacionesActualizadas += OnNotificacionesRecibidasAsync;
+    }
+
+    private async Task OnNotificacionesRecibidasAsync()
+    {
+        await InvokeAsync(async () =>
+        {
+            await CargarDatos();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        NotificacionesService.OnNotificacionesActualizadas -= OnNotificacionesRecibidasAsync;
+    }
+
+    private async Task EvaluarPermisosUsuario()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                puedeAprobarFacturas = user.IsInRole(RolesSistema.SocioDirector) || user.IsInRole(RolesSistema.Finanzas);
+                usuarioActualNombre = user.FindFirst(ClaimTypes.Name)?.Value 
+                    ?? user.FindFirst(ClaimTypes.GivenName)?.Value 
+                    ?? user.Identity.Name 
+                    ?? "Usuario Autorizado";
+                rolUsuarioActual = user.FindFirst(ClaimTypes.Role)?.Value ?? "";
+
+                if (!puedeAprobarFacturas)
+                {
+                    opcionesTiposEmision = new()
+                    {
+                        new(EstadoFactura.Borrador, "📝 Borrador / Proforma"),
+                        new(EstadoFactura.PendienteAprobacion, "⏳ Enviar a Revisión de Socios")
+                    };
+                }
+                else
+                {
+                    opcionesTiposEmision = new()
+                    {
+                        new(EstadoFactura.Borrador, "📝 Borrador / Proforma"),
+                        new(EstadoFactura.Emitida, "📜 Factura Fiscal Oficial (SAR)")
+                    };
+                }
+            }
+        }
+        catch
+        {
+            puedeAprobarFacturas = false;
+        }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -1687,6 +1817,124 @@
         }
     }
 
+    private void SeleccionarFiltroCard(string filtro)
+    {
+        if (filtroRapidoCard == filtro && filtro != "todos")
+        {
+            filtroRapidoCard = "todos"; // Re-click quita el filtro y vuelve a todos
+        }
+        else
+        {
+            filtroRapidoCard = filtro;
+            filtroEstado = 0; // Limpia el dropdown para evitar conflicto de filtros
+        }
+        FiltrarFacturas();
+    }
+
+    private void OnFiltroEstadoChanged()
+    {
+        if (filtroEstado > 0)
+        {
+            filtroRapidoCard = "todos"; // Si se usa el dropdown, se desactiva el filtro rápido de tarjeta
+        }
+        FiltrarFacturas();
+    }
+
+    private string ObtenerTituloFiltroCard()
+    {
+        return filtroRapidoCard switch
+        {
+            "emitidas" => "📜 Facturas Oficiales Timbradas (SAR)",
+            "cobradas" => "🟢 Facturas Totalmente Cobradas (Saldadas)",
+            "por_cobrar" => "🔴 Cuentas por Cobrar (Con Saldo Pendiente)",
+            "proformas" => "📝 Proformas y Presupuestos en Borrador",
+            "solventes" => "🛡️ Facturas Solventes P360 (Saldo L. 0.00)",
+            _ => "Todas las Facturas y Proformas"
+        };
+    }
+
+    private string ObtenerEstiloCard(string filtro, string accentColor)
+    {
+        bool esActivo = filtroRapidoCard == filtro;
+        if (esActivo)
+        {
+            return $"cursor: pointer; transition: all 0.2s ease-in-out; border: 2.5px solid {accentColor} !important; box-shadow: 0 4px 14px rgba(0,0,0,0.16) !important; transform: translateY(-2px); border-radius: 8px;";
+        }
+        return "cursor: pointer; transition: all 0.2s ease-in-out; border: 2.5px solid transparent !important; border-radius: 8px;";
+    }
+
+    private async Task ManejarAccionFactura(RadzenSplitButtonItem item, FacturaCobro f)
+    {
+        switch (item?.Value?.ToString())
+        {
+            case "ver":
+                await VerDetalleFactura(f);
+                break;
+            case "imprimir":
+                await JSRuntime.InvokeVoidAsync("open", $"/facturacion/imprimir/{f.Id}", "_blank");
+                break;
+            case "editar":
+                if (puedeAprobarFacturas)
+                {
+                    NotificationService.Notify(NotificationSeverity.Error, "Acción no Permitida", "Solo el abogado redactor puede editar la proforma.");
+                    return;
+                }
+                await AbrirModalEditarFactura(f);
+                break;
+            case "enviar":
+                if (puedeAprobarFacturas)
+                {
+                    NotificationService.Notify(NotificationSeverity.Error, "Acción no Permitida", "Solo el abogado redactor envía proformas a revisión.");
+                    return;
+                }
+                await EnviarFacturaAAprobacion(f);
+                break;
+            case "aprobar":
+                if (!puedeAprobarFacturas)
+                {
+                    NotificationService.Notify(NotificationSeverity.Error, "Permiso Denegado", "Solo el departamento de Finanzas o el Socio Director pueden aprobar y emitir facturas fiscales SAR.");
+                    return;
+                }
+                await AprobarFacturaDirecta(f);
+                break;
+            case "devolver":
+                if (!puedeAprobarFacturas)
+                {
+                    NotificationService.Notify(NotificationSeverity.Error, "Permiso Denegado", "Solo el departamento de Finanzas o el Socio Director pueden devolver proformas en revisión.");
+                    return;
+                }
+                AbrirModalDevolver(f);
+                break;
+            case "cobrar":
+                AbrirModalCobro(f);
+                break;
+            case "anular":
+                if (!puedeAprobarFacturas)
+                {
+                    NotificationService.Notify(NotificationSeverity.Error, "Permiso Denegado", "Solo el departamento de Finanzas o el Socio Director pueden anular facturas fiscales.");
+                    return;
+                }
+                await ConfirmarAnular(f);
+                break;
+            case "eliminar":
+                if (puedeAprobarFacturas)
+                {
+                    NotificationService.Notify(NotificationSeverity.Error, "Acción no Permitida", "Solo el abogado redactor puede descartar borradores.");
+                    return;
+                }
+                await EliminarBorrador(f);
+                break;
+            case "reactivar":
+                if (puedeAprobarFacturas)
+                {
+                    NotificationService.Notify(NotificationSeverity.Error, "Acción no Permitida", "Solo el abogado redactor puede reactivar borradores.");
+                    return;
+                }
+                await ReactivarBorrador(f);
+                break;
+        }
+    }
+
     private void FiltrarFacturas()
     {
         var query = facturas.AsEnumerable();
@@ -1694,6 +1942,20 @@
         if (ExpedienteId.HasValue)
         {
             query = query.Where(f => f.ExpedienteId == ExpedienteId.Value);
+        }
+
+        // Filtro rápido por tarjetas KPI interactivas
+        if (filtroRapidoCard != "todos")
+        {
+            query = filtroRapidoCard switch
+            {
+                "emitidas" => query.Where(f => !f.EsProforma && f.Estado != EstadoFactura.Anulada),
+                "cobradas" => query.Where(f => f.Estado == EstadoFactura.Pagada),
+                "por_cobrar" => query.Where(f => !f.EsProforma && f.SaldoPendiente > 0 && f.Estado != EstadoFactura.Anulada),
+                "proformas" => query.Where(f => f.EsProforma),
+                "solventes" => query.Where(f => !f.EsProforma && f.SaldoPendiente == 0 && f.Estado != EstadoFactura.Anulada),
+                _ => query
+            };
         }
 
         if (filtroEstado > 0)
@@ -1775,7 +2037,7 @@
             montoPagoIngresado,
             metodoPagoIngresado,
             referenciaPagoIngresada,
-            "Abg. Administrador"
+            usuarioActualNombre
         );
 
         NotificationService.Notify(NotificationSeverity.Success, "Cobro Registrado", 
@@ -1787,14 +2049,43 @@
 
     private async Task EnviarFacturaAAprobacion(FacturaCobro f)
     {
-        await FacturacionService.EnviarAAprobacionAsync(f.Id, "Abg. Especialista");
+        if (puedeAprobarFacturas)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Acción no Permitida", "Solo el abogado redactor puede enviar proformas a revisión.");
+            return;
+        }
+
+        await FacturacionService.EnviarAAprobacionAsync(f.Id, usuarioActualNombre);
         NotificationService.Notify(NotificationSeverity.Info, "Enviada a Revisión", 
-            $"La proforma {f.NumeroFactura} fue enviada a revisión de los socios.");
+            $"La proforma {f.NumeroFactura} fue enviada a revisión del departamento de Finanzas y Dirección.");
+
+        try
+        {
+            await NotificacionesService.CrearNotificacionAsync(new NotificacionSistema
+            {
+                RolDestino = $"{RolesSistema.Finanzas},{RolesSistema.SocioDirector}",
+                Titulo = $"Proforma en Revisión: {f.NumeroFactura}",
+                Mensaje = $"El abogado {usuarioActualNombre} ha enviado a revisión la proforma por {f.Moneda} {f.TotalFactura:N2} ({f.Cliente?.NombreRazonSocial ?? "General"}).",
+                Tipo = "Warning",
+                Icono = "receipt_long",
+                UrlDestino = "/facturacion",
+                CreadoPor = usuarioActualNombre
+            });
+        }
+        catch { }
+
         await CargarDatos();
     }
 
     private async Task AprobarFacturaDirecta(FacturaCobro f)
     {
+        if (!puedeAprobarFacturas)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Permiso Denegado", 
+                "No tiene autorización para aprobar facturas fiscales SAR. Esta acción requiere rol de Finanzas o Socio Director.");
+            return;
+        }
+
         bool? confirmado = await DialogService.Confirm(
             $"¿Desea aprobar la proforma {f.NumeroFactura} por {f.Moneda} {f.TotalFactura:N2} y autorizar su timbrado formal SAR?",
             "Aprobar y Emitir Factura Fiscal SAR",
@@ -1805,9 +2096,25 @@
         {
             try
             {
-                var facturaEmitida = await FacturacionService.AprobarFacturaAsync(f.Id, "Socio Director");
+                var facturaEmitida = await FacturacionService.AprobarFacturaAsync(f.Id, usuarioActualNombre);
                 NotificationService.Notify(NotificationSeverity.Success, "Factura Emitida SAR", 
-                    $"La proforma fue aprobada y timbrada con el correlativo {facturaEmitida.NumeroFactura}.");
+                    $"La proforma fue aprobada y timbrada con el correlativo fiscal {facturaEmitida.NumeroFactura} por {usuarioActualNombre}.");
+
+                try
+                {
+                    await NotificacionesService.CrearNotificacionAsync(new NotificacionSistema
+                    {
+                        RolDestino = RolesSistema.AbogadoSenior,
+                        Titulo = $"Factura SAR Aprobada: {facturaEmitida.NumeroFactura}",
+                        Mensaje = $"{usuarioActualNombre} (Finanzas/Dirección) aprobó formalmente y timbró con CAI la factura {facturaEmitida.NumeroFactura} por {facturaEmitida.Moneda} {facturaEmitida.TotalFactura:N2}.",
+                        Tipo = "Success",
+                        Icono = "verified",
+                        UrlDestino = "/facturacion",
+                        CreadoPor = usuarioActualNombre
+                    });
+                }
+                catch { }
+
                 await CargarDatos();
             }
             catch (Exception ex)
@@ -1827,22 +2134,51 @@
     private async Task ConfirmarDevolverABorrador()
     {
         if (facturaSeleccionadaDevolver == null) return;
+        if (!puedeAprobarFacturas)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Permiso Denegado", 
+                "Solo Finanzas o el Socio Director pueden devolver proformas en revisión.");
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(motivoDevolucionIngresado))
         {
             NotificationService.Notify(NotificationSeverity.Warning, "Atención", "Debe indicar el motivo o las observaciones para devolver la proforma.");
             return;
         }
 
-        await FacturacionService.DevolverABorradorAsync(facturaSeleccionadaDevolver.Id, motivoDevolucionIngresado, "Socio Director");
+        await FacturacionService.DevolverABorradorAsync(facturaSeleccionadaDevolver.Id, motivoDevolucionIngresado, usuarioActualNombre);
         NotificationService.Notify(NotificationSeverity.Warning, "Proforma Devuelta", 
             $"La proforma {facturaSeleccionadaDevolver.NumeroFactura} regresó a borrador para correcciones.");
+
+        try
+        {
+            await NotificacionesService.CrearNotificacionAsync(new NotificacionSistema
+            {
+                RolDestino = RolesSistema.AbogadoSenior,
+                Titulo = $"Proforma Devuelta: {facturaSeleccionadaDevolver.NumeroFactura}",
+                Mensaje = $"{usuarioActualNombre} devolvió la proforma a borrador para corrección. Motivo: {motivoDevolucionIngresado}",
+                Tipo = "Danger",
+                Icono = "undo",
+                UrlDestino = "/facturacion",
+                CreadoPor = usuarioActualNombre
+            });
+        }
+        catch { }
+
         mostrarModalDevolver = false;
         await CargarDatos();
     }
 
     private async Task ReactivarBorrador(FacturaCobro f)
     {
-        await FacturacionService.DevolverABorradorAsync(f.Id, "Reactivada para edición por el usuario", "Abg. Administrador");
+        if (puedeAprobarFacturas)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Acción no Permitida", "Solo el abogado redactor puede reactivar borradores.");
+            return;
+        }
+
+        await FacturacionService.DevolverABorradorAsync(f.Id, "Reactivada para edición por el usuario", usuarioActualNombre);
         NotificationService.Notify(NotificationSeverity.Info, "Proforma Reactivada", 
             $"La proforma {f.NumeroFactura} está nuevamente disponible para edición.");
         await CargarDatos();
@@ -1850,6 +2186,12 @@
 
     private async Task EliminarBorrador(FacturaCobro f)
     {
+        if (puedeAprobarFacturas)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Acción no Permitida", "Solo el abogado redactor puede descartar borradores.");
+            return;
+        }
+
         bool? confirmado = await DialogService.Confirm(
             $"¿Está seguro de eliminar permanentemente el borrador {f.NumeroFactura}?",
             "Descartar Borrador",
@@ -1858,7 +2200,7 @@
 
         if (confirmado == true)
         {
-            await FacturacionService.AnularFacturaAsync(f.Id, "Borrador descartado por el usuario", "Administrador");
+            await FacturacionService.AnularFacturaAsync(f.Id, "Borrador descartado por el usuario", usuarioActualNombre);
             NotificationService.Notify(NotificationSeverity.Info, "Borrador Descartado", $"El borrador {f.NumeroFactura} fue descartado.");
             await CargarDatos();
         }
@@ -1866,15 +2208,22 @@
 
     private async Task ConfirmarAnular(FacturaCobro f)
     {
+        if (!puedeAprobarFacturas)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Permiso Denegado", 
+                "Solo Finanzas o el Socio Director pueden anular facturas fiscales.");
+            return;
+        }
+
         bool? confirmado = await DialogService.Confirm(
             $"¿Está seguro de anular la factura {f.NumeroFactura} por {f.Moneda} {f.TotalFactura:N2}?",
-            "Anular Factura",
+            "Anular Factura Fiscal SAR",
             new ConfirmOptions { OkButtonText = "Anular", CancelButtonText = "Cancelar" }
         );
 
         if (confirmado == true)
         {
-            await FacturacionService.AnularFacturaAsync(f.Id, "Anulada a solicitud del usuario", "Administrador");
+            await FacturacionService.AnularFacturaAsync(f.Id, "Anulada a solicitud del usuario", usuarioActualNombre);
             NotificationService.Notify(NotificationSeverity.Info, "Factura Anulada", $"La factura {f.NumeroFactura} fue anulada.");
             await CargarDatos();
         }
@@ -1921,6 +2270,7 @@
 
     private async Task AbrirModalNuevaFactura()
     {
+        esEdicionFactura = false;
         tipoEmisionSeleccionada = EstadoFactura.Borrador;
         string prefijo = $"PROF-2026-{(facturas.Count(f => f.EsProforma) + 1):D4}";
         decimal tasaCambio = await FacturacionService.GetParametroDecimalAsync("TASA_CAMBIO_USD_HNL", 25.50m);
@@ -1938,7 +2288,7 @@
             TasaCambio = tasaCambio,
             HitoProcesal = "Presentación Oficial",
             Estado = EstadoFactura.Borrador,
-            SolicitadoPor = "Abg. Especialista",
+            SolicitadoPor = usuarioActualNombre,
             CreadoEn = DateTime.UtcNow,
             Detalles = new List<DetalleFacturaCobro>()
         };
@@ -1951,6 +2301,55 @@
             AgregarTarifaAFactura();
         }
 
+        mostrarModalNuevaFactura = true;
+    }
+
+    private async Task AbrirModalEditarFactura(FacturaCobro f)
+    {
+        if (puedeAprobarFacturas)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Acción no Permitida", "Solo el abogado redactor puede editar la proforma.");
+            return;
+        }
+
+        esEdicionFactura = true;
+        tipoEmisionSeleccionada = f.Estado == EstadoFactura.PendienteAprobacion ? EstadoFactura.PendienteAprobacion : EstadoFactura.Borrador;
+
+        var facturaExistente = await FacturacionService.GetFacturaByIdAsync(f.Id);
+        if (facturaExistente == null) return;
+
+        nuevaFactura = new FacturaCobro
+        {
+            Id = facturaExistente.Id,
+            NumeroFactura = facturaExistente.NumeroFactura,
+            NumeroCAI = facturaExistente.NumeroCAI,
+            ClienteId = facturaExistente.ClienteId,
+            ExpedienteId = facturaExistente.ExpedienteId,
+            FechaEmision = facturaExistente.FechaEmision,
+            FechaVencimiento = facturaExistente.FechaVencimiento,
+            Moneda = facturaExistente.Moneda,
+            TasaCambio = facturaExistente.TasaCambio,
+            HitoProcesal = facturaExistente.HitoProcesal,
+            Estado = facturaExistente.Estado,
+            SolicitadoPor = facturaExistente.SolicitadoPor ?? usuarioActualNombre,
+            MotivoRechazo = facturaExistente.MotivoRechazo,
+            CreadoEn = facturaExistente.CreadoEn,
+            Detalles = facturaExistente.Detalles.Select(d => new DetalleFacturaCobro
+            {
+                Id = d.Id,
+                FacturaId = d.FacturaId,
+                TarifaArancelariaId = d.TarifaArancelariaId,
+                Concepto = d.Concepto,
+                EsGastoOficial = d.EsGastoOficial,
+                Cantidad = d.Cantidad,
+                PrecioUnitario = d.PrecioUnitario,
+                Subtotal = d.Subtotal,
+                MontoISV = d.MontoISV,
+                TotalLinea = d.TotalLinea
+            }).ToList()
+        };
+
+        RecalcularTotalesNuevaFactura();
         mostrarModalNuevaFactura = true;
     }
 
@@ -2063,6 +2462,12 @@
             return;
         }
 
+        if (estadoDestino == EstadoFactura.Emitida && !puedeAprobarFacturas)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Permiso Denegado", "Solo el departamento de Finanzas o el Socio Director pueden emitir facturas oficiales SAR.");
+            return;
+        }
+
         nuevaFactura.Estado = estadoDestino;
         if (estadoDestino == EstadoFactura.Emitida)
         {
@@ -2074,12 +2479,12 @@
             {
                 nuevaFactura.NumeroCAI = await FacturacionService.GetParametroStringAsync("CAI_SAR_AUTORIZADO", "A84F2B-98CE21-1B4480-1498B2-FA8321-44");
             }
-            nuevaFactura.AprobadoPor = "Socio Director";
+            nuevaFactura.AprobadoPor = usuarioActualNombre;
             nuevaFactura.FechaAprobacion = DateTime.UtcNow;
         }
         else
         {
-            nuevaFactura.SolicitadoPor = "Abg. Especialista";
+            nuevaFactura.SolicitadoPor = usuarioActualNombre;
             if (string.IsNullOrEmpty(nuevaFactura.NumeroFactura) || !nuevaFactura.NumeroFactura.StartsWith("PROF-"))
             {
                 nuevaFactura.NumeroFactura = $"PROF-2026-{(facturas.Count(f => f.EsProforma) + 1):D4}";
@@ -2089,7 +2494,7 @@
 
         try
         {
-            await FacturacionService.GuardarFacturaAsync(nuevaFactura, "Abg. Administrador");
+            await FacturacionService.GuardarFacturaAsync(nuevaFactura, usuarioActualNombre);
             
             string msg = estadoDestino switch
             {
@@ -2100,6 +2505,28 @@
             };
 
             NotificationService.Notify(NotificationSeverity.Success, "Operación Exitosa", msg);
+
+            if (estadoDestino == EstadoFactura.PendienteAprobacion)
+            {
+                nuevaFactura.MotivoRechazo = null;
+                try
+                {
+                    await NotificacionesService.CrearNotificacionAsync(new NotificacionSistema
+                    {
+                        RolDestino = $"{RolesSistema.Finanzas},{RolesSistema.SocioDirector}",
+                        Titulo = esEdicionFactura ? $"Proforma Corregida en Revisión: {nuevaFactura.NumeroFactura}" : $"Nueva Proforma en Revisión: {nuevaFactura.NumeroFactura}",
+                        Mensaje = esEdicionFactura 
+                            ? $"El abogado {usuarioActualNombre} corrigió y reenvió a revisión la proforma {nuevaFactura.NumeroFactura} por {nuevaFactura.Moneda} {nuevaFactura.TotalFactura:N2}."
+                            : $"El abogado {usuarioActualNombre} registró y envió a revisión la proforma {nuevaFactura.NumeroFactura} por {nuevaFactura.Moneda} {nuevaFactura.TotalFactura:N2}.",
+                        Tipo = "Warning",
+                        Icono = "receipt_long",
+                        UrlDestino = "/facturacion",
+                        CreadoPor = usuarioActualNombre
+                    });
+                }
+                catch { }
+            }
+
             mostrarModalNuevaFactura = false;
             await CargarDatos();
         }

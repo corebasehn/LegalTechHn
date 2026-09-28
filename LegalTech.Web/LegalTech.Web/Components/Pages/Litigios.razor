@@ -342,6 +342,24 @@
                                 AllowSorting="true" EmptyText="No se encontraron controversias o litigios con los filtros seleccionados." 
                                 Class="w-100 table-sm" Style="min-width: 1050px;">
                     <Columns>
+                        <!-- ACCIONES (PRIMERA COLUMNA) -->
+                        <RadzenDataGridColumn TItem="Litigio" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                            <Template Context="l">
+                                <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                   Click="@((RadzenSplitButtonItem args) => ManejarAccionLitigio(args, l))">
+                                    <ChildContent>
+                                        <RadzenSplitButtonItem Text="Editar / Detalle" Value="editar" Icon="edit" />
+                                        <RadzenSplitButtonItem Text="Interponer Recurso" Value="recurso" Icon="campaign" />
+                                        @if (l.ExpedienteId.HasValue)
+                                        {
+                                            <RadzenSplitButtonItem Text="Ver Expediente" Value="expediente" Icon="folder" />
+                                        }
+                                        <RadzenSplitButtonItem Text="Eliminar Litigio" Value="eliminar" Icon="delete" />
+                                    </ChildContent>
+                                </RadzenSplitButton>
+                            </Template>
+                        </RadzenDataGridColumn>
+
                         <!-- 1. SEMÁFORO Y PLAZO FATAL -->
                         <RadzenDataGridColumn TItem="Litigio" Title="Semáforo / Término Fatal" Width="170px">
                             <Template Context="l">
@@ -455,20 +473,6 @@
                                         <RadzenIcon Icon="person" Style="font-size: 0.7rem;" /> @l.AbogadoLitigante
                                     </span>
                                 }
-                            </Template>
-                        </RadzenDataGridColumn>
-
-                        <!-- 7. ACCIONES -->
-                        <RadzenDataGridColumn TItem="Litigio" Title="Acciones" Width="140px" TextAlign="TextAlign.Center">
-                            <Template Context="l">
-                                <div class="d-flex justify-content-center gap-1">
-                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
-                                                  Click="@(() => AbrirModalEditar(l))" title="Editar / Ver Detalle" />
-                                    <RadzenButton Icon="campaign" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
-                                                  Click="@(() => AbrirModalRecurso(l))" title="Interponer Recurso (10 d / 3 d / 30 d)" />
-                                    <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.ExtraSmall" 
-                                                  Click="@(() => ConfirmarEliminar(l))" title="Eliminar" />
-                                </div>
                             </Template>
                         </RadzenDataGridColumn>
                     </Columns>
@@ -926,5 +930,27 @@
             EstadoLitigio.ResueltoDesfavorable => "bg-secondary text-white",
             _ => "bg-light text-dark"
         };
+    }
+
+    private void ManejarAccionLitigio(RadzenSplitButtonItem item, Litigio l)
+    {
+        switch (item?.Value?.ToString())
+        {
+            case "editar":
+                AbrirModalEditar(l);
+                break;
+            case "recurso":
+                AbrirModalRecurso(l);
+                break;
+            case "expediente":
+                if (l.ExpedienteId.HasValue)
+                {
+                    NavigationManager.NavigateTo($"/expedientes/{l.ExpedienteId}");
+                }
+                break;
+            case "eliminar":
+                _ = ConfirmarEliminar(l);
+                break;
+        }
     }
 }

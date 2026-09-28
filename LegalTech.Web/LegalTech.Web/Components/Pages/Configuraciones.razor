@@ -120,6 +120,17 @@
                     <RadzenDataGrid Data="@tiposSigno" TItem="TipoSigno" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="7"
                                     FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
                         <Columns>
+                            <RadzenDataGridColumn TItem="TipoSigno" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                                <Template Context="t">
+                                    <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                       Click="@((RadzenSplitButtonItem args) => ManejarAccionTipoSigno(args, t))">
+                                        <ChildContent>
+                                            <RadzenSplitButtonItem Text="Editar" Value="editar" Icon="edit" />
+                                            <RadzenSplitButtonItem Text="@(t.Activo ? "Desactivar" : "Activar")" Value="toggle" Icon="@(t.Activo ? "toggle_off" : "toggle_on")" />
+                                        </ChildContent>
+                                    </RadzenSplitButton>
+                                </Template>
+                            </RadzenDataGridColumn>
                             <RadzenDataGridColumn TItem="TipoSigno" Property="Id" Title="ID" Width="60px" TextAlign="TextAlign.Center" />
                             <RadzenDataGridColumn TItem="TipoSigno" Property="Nombre" Title="Nombre del Signo" Width="220px">
                                 <Template Context="t">
@@ -132,15 +143,6 @@
                                     <span class="badge @(t.Activo ? "bg-success" : "bg-secondary")">
                                         @(t.Activo ? "Activo" : "Inactivo")
                                     </span>
-                                </Template>
-                            </RadzenDataGridColumn>
-                            <RadzenDataGridColumn TItem="TipoSigno" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
-                                <Template Context="t">
-                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarTipoSigno(t))" Class="me-1" />
-                                    <RadzenButton Icon="@(t.Activo ? "toggle_on" : "toggle_off")" 
-                                                  ButtonStyle="@(t.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
-                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleTipoSigno(t.Id))" 
-                                                  title="@(t.Activo ? "Desactivar" : "Activar")" />
                                 </Template>
                             </RadzenDataGridColumn>
                         </Columns>
@@ -212,6 +214,17 @@
                     <RadzenDataGrid Data="@estadosProcesales" TItem="EstadoProcesal" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="7"
                                     FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
                         <Columns>
+                            <RadzenDataGridColumn TItem="EstadoProcesal" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                                <Template Context="ep">
+                                    <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                       Click="@((RadzenSplitButtonItem args) => ManejarAccionEstadoProcesal(args, ep))">
+                                        <ChildContent>
+                                            <RadzenSplitButtonItem Text="Editar" Value="editar" Icon="edit" />
+                                            <RadzenSplitButtonItem Text="@(ep.Activo ? "Desactivar" : "Activar")" Value="toggle" Icon="@(ep.Activo ? "toggle_off" : "toggle_on")" />
+                                        </ChildContent>
+                                    </RadzenSplitButton>
+                                </Template>
+                            </RadzenDataGridColumn>
                             <RadzenDataGridColumn TItem="EstadoProcesal" Property="Orden" Title="Orden" Width="70px" TextAlign="TextAlign.Center" />
                             <RadzenDataGridColumn TItem="EstadoProcesal" Property="Nombre" Title="Nombre del Estado" Width="260px">
                                 <Template Context="ep">
@@ -233,15 +246,6 @@
                                     <span class="badge @(ep.Activo ? "bg-success" : "bg-secondary")">
                                         @(ep.Activo ? "Activo" : "Inactivo")
                                     </span>
-                                </Template>
-                            </RadzenDataGridColumn>
-                            <RadzenDataGridColumn TItem="EstadoProcesal" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
-                                <Template Context="ep">
-                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarEstadoProcesal(ep))" Class="me-1" />
-                                    <RadzenButton Icon="@(ep.Activo ? "toggle_on" : "toggle_off")" 
-                                                  ButtonStyle="@(ep.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
-                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleEstadoProcesal(ep.Id))" 
-                                                  title="@(ep.Activo ? "Desactivar" : "Activar")" />
                                 </Template>
                             </RadzenDataGridColumn>
                         </Columns>
@@ -325,6 +329,17 @@
                     <RadzenDataGrid Data="@tiposActuaciones" TItem="TipoActuacion" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="7"
                                     FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
                         <Columns>
+                            <RadzenDataGridColumn TItem="TipoActuacion" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                                <Template Context="ta">
+                                    <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                       Click="@((RadzenSplitButtonItem args) => ManejarAccionTipoActuacion(args, ta))">
+                                        <ChildContent>
+                                            <RadzenSplitButtonItem Text="Editar" Value="editar" Icon="edit" />
+                                            <RadzenSplitButtonItem Text="@(ta.Activo ? "Desactivar" : "Activar")" Value="toggle" Icon="@(ta.Activo ? "toggle_off" : "toggle_on")" />
+                                        </ChildContent>
+                                    </RadzenSplitButton>
+                                </Template>
+                            </RadzenDataGridColumn>
                             <RadzenDataGridColumn TItem="TipoActuacion" Title="Icono" Width="70px" TextAlign="TextAlign.Center">
                                 <Template Context="ta">
                                     <RadzenIcon Icon="@(ta.Icono ?? "event_note")" Class="@($"text-{(ta.Color ?? "primary")}")" />
@@ -348,15 +363,6 @@
                                     <span class="badge @(ta.Activo ? "bg-success" : "bg-secondary")">
                                         @(ta.Activo ? "Activo" : "Inactivo")
                                     </span>
-                                </Template>
-                            </RadzenDataGridColumn>
-                            <RadzenDataGridColumn TItem="TipoActuacion" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
-                                <Template Context="ta">
-                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarTipoActuacion(ta))" Class="me-1" />
-                                    <RadzenButton Icon="@(ta.Activo ? "toggle_on" : "toggle_off")" 
-                                                  ButtonStyle="@(ta.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
-                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleTipoActuacion(ta.Id))" 
-                                                  title="@(ta.Activo ? "Desactivar" : "Activar")" />
                                 </Template>
                             </RadzenDataGridColumn>
                         </Columns>
@@ -418,6 +424,17 @@
                     <RadzenDataGrid Data="@viasPresentacion" TItem="ViaPresentacion" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="7"
                                     FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
                         <Columns>
+                            <RadzenDataGridColumn TItem="ViaPresentacion" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                                <Template Context="vp">
+                                    <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                       Click="@((RadzenSplitButtonItem args) => ManejarAccionViaPresentacion(args, vp))">
+                                        <ChildContent>
+                                            <RadzenSplitButtonItem Text="Editar" Value="editar" Icon="edit" />
+                                            <RadzenSplitButtonItem Text="@(vp.Activo ? "Desactivar" : "Activar")" Value="toggle" Icon="@(vp.Activo ? "toggle_off" : "toggle_on")" />
+                                        </ChildContent>
+                                    </RadzenSplitButton>
+                                </Template>
+                            </RadzenDataGridColumn>
                             <RadzenDataGridColumn TItem="ViaPresentacion" Property="Id" Title="ID" Width="60px" TextAlign="TextAlign.Center" />
                             <RadzenDataGridColumn TItem="ViaPresentacion" Property="Nombre" Title="Vía de Presentación" Width="260px">
                                 <Template Context="vp">
@@ -430,15 +447,6 @@
                                     <span class="badge @(vp.Activo ? "bg-success" : "bg-secondary")">
                                         @(vp.Activo ? "Activo" : "Inactivo")
                                     </span>
-                                </Template>
-                            </RadzenDataGridColumn>
-                            <RadzenDataGridColumn TItem="ViaPresentacion" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
-                                <Template Context="vp">
-                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarViaPresentacion(vp))" Class="me-1" />
-                                    <RadzenButton Icon="@(vp.Activo ? "toggle_on" : "toggle_off")" 
-                                                  ButtonStyle="@(vp.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
-                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleViaPresentacion(vp.Id))" 
-                                                  title="@(vp.Activo ? "Desactivar" : "Activar")" />
                                 </Template>
                             </RadzenDataGridColumn>
                         </Columns>
@@ -505,6 +513,17 @@
                     <RadzenDataGrid Data="@ubicacionesArchivo" TItem="UbicacionArchivo" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="7"
                                     FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
                         <Columns>
+                            <RadzenDataGridColumn TItem="UbicacionArchivo" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                                <Template Context="ua">
+                                    <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                       Click="@((RadzenSplitButtonItem args) => ManejarAccionUbicacionArchivo(args, ua))">
+                                        <ChildContent>
+                                            <RadzenSplitButtonItem Text="Editar" Value="editar" Icon="edit" />
+                                            <RadzenSplitButtonItem Text="@(ua.Activo ? "Desactivar" : "Activar")" Value="toggle" Icon="@(ua.Activo ? "toggle_off" : "toggle_on")" />
+                                        </ChildContent>
+                                    </RadzenSplitButton>
+                                </Template>
+                            </RadzenDataGridColumn>
                             <RadzenDataGridColumn TItem="UbicacionArchivo" Property="CodigoArea" Title="Código" Width="130px">
                                 <Template Context="ua">
                                     <span class="badge bg-dark font-monospace">@ua.CodigoArea</span>
@@ -521,15 +540,6 @@
                                     <span class="badge @(ua.Activo ? "bg-success" : "bg-secondary")">
                                         @(ua.Activo ? "Activo" : "Inactivo")
                                     </span>
-                                </Template>
-                            </RadzenDataGridColumn>
-                            <RadzenDataGridColumn TItem="UbicacionArchivo" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
-                                <Template Context="ua">
-                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarUbicacionArchivo(ua))" Class="me-1" />
-                                    <RadzenButton Icon="@(ua.Activo ? "toggle_on" : "toggle_off")" 
-                                                  ButtonStyle="@(ua.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
-                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleUbicacionArchivo(ua.Id))" 
-                                                  title="@(ua.Activo ? "Desactivar" : "Activar")" />
                                 </Template>
                             </RadzenDataGridColumn>
                         </Columns>
@@ -602,6 +612,17 @@
                     <RadzenDataGrid Data="@feriadosNacionales" TItem="FeriadoNacional" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10"
                                     FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
                         <Columns>
+                            <RadzenDataGridColumn TItem="FeriadoNacional" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                                <Template Context="f">
+                                    <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                       Click="@((RadzenSplitButtonItem args) => ManejarAccionFeriado(args, f))">
+                                        <ChildContent>
+                                            <RadzenSplitButtonItem Text="Editar" Value="editar" Icon="edit" />
+                                            <RadzenSplitButtonItem Text="@(f.Activo ? "Desactivar" : "Activar")" Value="toggle" Icon="@(f.Activo ? "toggle_off" : "toggle_on")" />
+                                        </ChildContent>
+                                    </RadzenSplitButton>
+                                </Template>
+                            </RadzenDataGridColumn>
                             <RadzenDataGridColumn TItem="FeriadoNacional" Property="Fecha" Title="Fecha" Width="130px">
                                 <Template Context="f">
                                     <strong>@f.Fecha.ToString("dd/MM/yyyy")</strong>
@@ -628,15 +649,6 @@
                                     <span class="badge @(f.Activo ? "bg-success" : "bg-secondary")">
                                         @(f.Activo ? "Inhábil" : "Deshabilitado")
                                     </span>
-                                </Template>
-                            </RadzenDataGridColumn>
-                            <RadzenDataGridColumn TItem="FeriadoNacional" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
-                                <Template Context="f">
-                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarFeriado(f))" Class="me-1" />
-                                    <RadzenButton Icon="@(f.Activo ? "toggle_on" : "toggle_off")" 
-                                                  ButtonStyle="@(f.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
-                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleFeriado(f.Id))" 
-                                                  title="@(f.Activo ? "Desactivar" : "Activar")" />
                                 </Template>
                             </RadzenDataGridColumn>
                         </Columns>
@@ -736,6 +748,17 @@
                     <RadzenDataGrid Data="@parametrosFiscales" TItem="ParametroFiscal" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="8"
                                     FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
                         <Columns>
+                            <RadzenDataGridColumn TItem="ParametroFiscal" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                                <Template Context="p">
+                                    <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                       Click="@((RadzenSplitButtonItem args) => ManejarAccionParametroFiscal(args, p))">
+                                        <ChildContent>
+                                            <RadzenSplitButtonItem Text="Editar" Value="editar" Icon="edit" />
+                                            <RadzenSplitButtonItem Text="@(p.Activo ? "Desactivar" : "Activar")" Value="toggle" Icon="@(p.Activo ? "toggle_off" : "toggle_on")" />
+                                        </ChildContent>
+                                    </RadzenSplitButton>
+                                </Template>
+                            </RadzenDataGridColumn>
                             <RadzenDataGridColumn TItem="ParametroFiscal" Property="Clave" Title="Clave" Width="180px">
                                 <Template Context="p">
                                     <code class="text-primary fw-bold">@p.Clave</code>
@@ -762,15 +785,6 @@
                                     <span class="badge @(p.Activo ? "bg-success" : "bg-secondary")">
                                         @(p.Activo ? "Activo" : "Inactivo")
                                     </span>
-                                </Template>
-                            </RadzenDataGridColumn>
-                            <RadzenDataGridColumn TItem="ParametroFiscal" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
-                                <Template Context="p">
-                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarParametroFiscal(p))" Class="me-1" title="Editar" />
-                                    <RadzenButton Icon="@(p.Activo ? "toggle_on" : "toggle_off")" 
-                                                  ButtonStyle="@(p.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
-                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleParametroFiscal(p.Id))" 
-                                                  title="@(p.Activo ? "Desactivar" : "Activar")" />
                                 </Template>
                             </RadzenDataGridColumn>
                         </Columns>
@@ -861,6 +875,17 @@
                     <RadzenDataGrid Data="@tarifasArancelarias" TItem="TarifaArancelaria" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="8"
                                     FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
                         <Columns>
+                            <RadzenDataGridColumn TItem="TarifaArancelaria" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                                <Template Context="t">
+                                    <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                       Click="@((RadzenSplitButtonItem args) => ManejarAccionTarifa(args, t))">
+                                        <ChildContent>
+                                            <RadzenSplitButtonItem Text="Editar" Value="editar" Icon="edit" />
+                                            <RadzenSplitButtonItem Text="@(t.Activo ? "Desactivar" : "Activar")" Value="toggle" Icon="@(t.Activo ? "toggle_off" : "toggle_on")" />
+                                        </ChildContent>
+                                    </RadzenSplitButton>
+                                </Template>
+                            </RadzenDataGridColumn>
                             <RadzenDataGridColumn TItem="TarifaArancelaria" Property="Concepto" Title="Concepto" Width="260px">
                                 <Template Context="t">
                                     <strong>@t.Concepto</strong>
@@ -896,15 +921,6 @@
                                     <span class="badge @(t.Activo ? "bg-success" : "bg-secondary")">
                                         @(t.Activo ? "Activa" : "Inactiva")
                                     </span>
-                                </Template>
-                            </RadzenDataGridColumn>
-                            <RadzenDataGridColumn TItem="TarifaArancelaria" Title="Acciones" Width="120px" TextAlign="TextAlign.Center">
-                                <Template Context="t">
-                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarTarifa(t))" Class="me-1" title="Editar" />
-                                    <RadzenButton Icon="@(t.Activo ? "toggle_on" : "toggle_off")" 
-                                                  ButtonStyle="@(t.Activo ? ButtonStyle.Warning : ButtonStyle.Light)" 
-                                                  Size="ButtonSize.ExtraSmall" Click="@(() => ToggleTarifa(t.Id))" 
-                                                  title="@(t.Activo ? "Desactivar" : "Activar")" />
                                 </Template>
                             </RadzenDataGridColumn>
                         </Columns>
@@ -1018,6 +1034,16 @@
                     <RadzenDataGrid Data="@configuracionesSistema" TItem="Configuracion" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10"
                                     FilterMode="FilterMode.SimpleWithMenu" Style="width: 100%;">
                         <Columns>
+                            <RadzenDataGridColumn TItem="Configuracion" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                                <Template Context="c">
+                                    <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                       Click="@((RadzenSplitButtonItem args) => ManejarAccionConfiguracion(args, c))">
+                                        <ChildContent>
+                                            <RadzenSplitButtonItem Text="Editar" Value="editar" Icon="edit" />
+                                        </ChildContent>
+                                    </RadzenSplitButton>
+                                </Template>
+                            </RadzenDataGridColumn>
                             <RadzenDataGridColumn TItem="Configuracion" Property="Llave" Title="Llave / Parámetro" Width="220px">
                                 <Template Context="c">
                                     <strong class="font-monospace text-primary">@c.Llave</strong>
@@ -1044,11 +1070,6 @@
                             <RadzenDataGridColumn TItem="Configuracion" Property="ActualizadoEn" Title="Última Actualización" Width="150px">
                                 <Template Context="c">
                                     <small class="text-muted">@c.ActualizadoEn.ToString("dd/MM/yyyy HH:mm")</small>
-                                </Template>
-                            </RadzenDataGridColumn>
-                            <RadzenDataGridColumn TItem="Configuracion" Title="Acciones" Width="90px" TextAlign="TextAlign.Center">
-                                <Template Context="c">
-                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" Click="@(() => EditarConfiguracion(c))" title="Editar Llave" />
                                 </Template>
                             </RadzenDataGridColumn>
                         </Columns>
@@ -1142,6 +1163,18 @@
                             <div class="table-responsive w-100 pt-2">
                                 <RadzenDataGrid Data="@usuariosSistema" TItem="Usuario" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10" Style="width: 100%;">
                                     <Columns>
+                                        <RadzenDataGridColumn TItem="Usuario" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                                            <Template Context="u">
+                                                <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                                   Click="@((RadzenSplitButtonItem args) => ManejarAccionUsuario(args, u))">
+                                                    <ChildContent>
+                                                        <RadzenSplitButtonItem Text="Editar Usuario" Value="editar" Icon="edit" />
+                                                        <RadzenSplitButtonItem Text="Resetear Clave" Value="reset" Icon="vpn_key" />
+                                                        <RadzenSplitButtonItem Text="@(u.Activo ? "Desactivar Acceso" : "Activar Acceso")" Value="toggle" Icon="@(u.Activo ? "toggle_off" : "toggle_on")" />
+                                                    </ChildContent>
+                                                </RadzenSplitButton>
+                                            </Template>
+                                        </RadzenDataGridColumn>
                                         <RadzenDataGridColumn TItem="Usuario" Property="NombreCompleto" Title="Usuario / Cargo" Width="260px">
                                             <Template Context="u">
                                                 <div>
@@ -1182,18 +1215,6 @@
                                         <RadzenDataGridColumn TItem="Usuario" Property="UltimoAcceso" Title="Último Acceso" Width="150px">
                                             <Template Context="u">
                                                 <small class="text-muted">@(u.UltimoAcceso?.ToString("dd/MM/yyyy HH:mm") ?? "Nunca")</small>
-                                            </Template>
-                                        </RadzenDataGridColumn>
-                                        <RadzenDataGridColumn TItem="Usuario" Title="Acciones" Width="140px" TextAlign="TextAlign.Center">
-                                            <Template Context="u">
-                                                <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
-                                                              Click="@(() => EditarUsuario(u))" Class="me-1" title="Editar Usuario" />
-                                                <RadzenButton Icon="vpn_key" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
-                                                              Click="@(() => AbrirModalResetPassword(u))" Class="me-1" title="Resetear Contraseña" />
-                                                <RadzenButton Icon="@(u.Activo ? "toggle_on" : "toggle_off")" 
-                                                              ButtonStyle="@(u.Activo ? ButtonStyle.Danger : ButtonStyle.Light)" 
-                                                              Size="ButtonSize.ExtraSmall" Click="@(() => ToggleActivoUsuario(u.Id))" 
-                                                              title="@(u.Activo ? "Desactivar Acceso" : "Activar Acceso")" />
                                             </Template>
                                         </RadzenDataGridColumn>
                                     </Columns>
@@ -1905,6 +1926,129 @@
         else
         {
             NotificationService.Notify(NotificationSeverity.Error, "Error", resultado.Error ?? "No se pudo resetear la contraseña.");
+        }
+    }
+
+    // =============================================================
+    // MANEJADORES DE ACCIONES CON DROPDOWN (RadzenSplitButton)
+    // =============================================================
+    private async Task ManejarAccionTipoSigno(RadzenSplitButtonItem item, TipoSigno t)
+    {
+        if (item.Value?.ToString() == "editar")
+        {
+            EditarTipoSigno(t);
+        }
+        else if (item.Value?.ToString() == "toggle")
+        {
+            await ToggleTipoSigno(t.Id);
+        }
+    }
+
+    private async Task ManejarAccionEstadoProcesal(RadzenSplitButtonItem item, EstadoProcesal ep)
+    {
+        if (item.Value?.ToString() == "editar")
+        {
+            EditarEstadoProcesal(ep);
+        }
+        else if (item.Value?.ToString() == "toggle")
+        {
+            await ToggleEstadoProcesal(ep.Id);
+        }
+    }
+
+    private async Task ManejarAccionTipoActuacion(RadzenSplitButtonItem item, TipoActuacion ta)
+    {
+        if (item.Value?.ToString() == "editar")
+        {
+            EditarTipoActuacion(ta);
+        }
+        else if (item.Value?.ToString() == "toggle")
+        {
+            await ToggleTipoActuacion(ta.Id);
+        }
+    }
+
+    private async Task ManejarAccionViaPresentacion(RadzenSplitButtonItem item, ViaPresentacion vp)
+    {
+        if (item.Value?.ToString() == "editar")
+        {
+            EditarViaPresentacion(vp);
+        }
+        else if (item.Value?.ToString() == "toggle")
+        {
+            await ToggleViaPresentacion(vp.Id);
+        }
+    }
+
+    private async Task ManejarAccionUbicacionArchivo(RadzenSplitButtonItem item, UbicacionArchivo ua)
+    {
+        if (item.Value?.ToString() == "editar")
+        {
+            EditarUbicacionArchivo(ua);
+        }
+        else if (item.Value?.ToString() == "toggle")
+        {
+            await ToggleUbicacionArchivo(ua.Id);
+        }
+    }
+
+    private async Task ManejarAccionFeriado(RadzenSplitButtonItem item, FeriadoNacional f)
+    {
+        if (item.Value?.ToString() == "editar")
+        {
+            EditarFeriado(f);
+        }
+        else if (item.Value?.ToString() == "toggle")
+        {
+            await ToggleFeriado(f.Id);
+        }
+    }
+
+    private async Task ManejarAccionParametroFiscal(RadzenSplitButtonItem item, ParametroFiscal p)
+    {
+        if (item.Value?.ToString() == "editar")
+        {
+            EditarParametroFiscal(p);
+        }
+        else if (item.Value?.ToString() == "toggle")
+        {
+            await ToggleParametroFiscal(p.Id);
+        }
+    }
+
+    private async Task ManejarAccionTarifa(RadzenSplitButtonItem item, TarifaArancelaria t)
+    {
+        if (item.Value?.ToString() == "editar")
+        {
+            EditarTarifa(t);
+        }
+        else if (item.Value?.ToString() == "toggle")
+        {
+            await ToggleTarifa(t.Id);
+        }
+    }
+
+    private void ManejarAccionConfiguracion(RadzenSplitButtonItem item, Configuracion c)
+    {
+        if (item.Value?.ToString() == "editar")
+        {
+            EditarConfiguracion(c);
+        }
+    }
+
+    private async Task ManejarAccionUsuario(RadzenSplitButtonItem item, Usuario u)
+    {
+        if (item.Value?.ToString() == "editar")
+        {
+            EditarUsuario(u);
+        }
+        else if (item.Value?.ToString() == "reset")
+        {
+            AbrirModalResetPassword(u);
+        }
+        else if (item.Value?.ToString() == "toggle")
+        {
+            await ToggleActivoUsuario(u.Id);
         }
     }
 }

@@ -1,10 +1,14 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @using System.Security.Claims
+@using LegalTech.Web.Domain.Entities
+@using LegalTech.Web.Services
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 @inject AuthService AuthService
+@inject NotificacionesAppService NotificacionesService
 
 <div class="page @(sidebarColapsado ? "sidebar-colapsada" : "")">
     <!-- Backdrop oscuro para móvil cuando el menú se despliega -->
@@ -49,6 +53,101 @@
                             <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-2 d-flex align-items-center justify-content-center shadow-sm" style="width: 36px; height: 36px;">
                                 <RadzenIcon Icon="@RolesSistema.ObtenerIcono(context.User.FindFirst(ClaimTypes.Role)?.Value ?? "")" Style="font-size: 1.2rem;" />
                             </div>
+                        </div>
+
+                        <!-- BOTÓN NOTIFICACIONES ESTILO RED SOCIAL CON CONTADOR ROJO -->
+                        <div class="position-relative">
+                            <button type="button" class="btn btn-light btn-sm position-relative d-flex align-items-center justify-content-center border shadow-none"
+                                     @onclick="ToggleMenuNotificaciones"
+                                     title="Notificaciones y avisos del sistema en tiempo real"
+                                     style="width: 32px; height: 32px; border-radius: 8px; cursor: pointer; color: @(noLeidasCount > 0 ? "#dc3545" : "#495057"); background-color: @(noLeidasCount > 0 ? "#fff5f5" : "#f8f9fa");">
+                                <RadzenIcon Icon="@(noLeidasCount > 0 ? "notifications_active" : "notifications")" Class="@(noLeidasCount > 0 ? "campana-notif-activa" : "")" Style="font-size: 1.15rem;" />
+                                @if (noLeidasCount > 0)
+                                {
+                                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-white campana-badge-pulso" 
+                                          style="font-size: 0.65rem; padding: 0.22em 0.42em; box-shadow: 0 2px 5px rgba(220,53,69,0.4);">
+                                        @(noLeidasCount > 99 ? "99+" : noLeidasCount.ToString())
+                                    </span>
+                                }
+                            </button>
+
+                            @if (mostrarMenuNotificaciones)
+                            {
+                                <!-- Fondo invisible para cerrar al hacer clic afuera -->
+                                <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1050; background: transparent;" @onclick="CerrarMenuNotificaciones"></div>
+
+                                <!-- Panel Flotante de Notificaciones Estilo Red Social -->
+                                <div class="card shadow-lg border position-absolute end-0 mt-2 rounded-3 text-start" 
+                                     style="width: 410px; max-width: 95vw; z-index: 1055; box-shadow: 0 10px 30px rgba(0,0,0,0.18) !important;">
+                                    <!-- Header -->
+                                    <div class="card-header bg-white border-bottom py-2 px-3 d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <RadzenIcon Icon="notifications" Class="text-primary" Style="font-size: 1.1rem;" />
+                                            <span class="fw-bold text-dark small">Notificaciones</span>
+                                            @if (noLeidasCount > 0)
+                                            {
+                                                <span class="badge bg-danger rounded-pill small" style="font-size: 0.68rem;">@noLeidasCount nuevas</span>
+                                            }
+                                        </div>
+                                        @if (noLeidasCount > 0)
+                                        {
+                                            <button type="button" class="btn btn-link p-0 text-decoration-none text-primary small fw-semibold" 
+                                                    style="font-size: 0.75rem;" @onclick="MarcarTodasComoLeidasAsync">
+                                                Marcar leídas
+                                            </button>
+                                        }
+                                    </div>
+
+                                    <!-- Lista de Notificaciones -->
+                                    <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                                        @if (!notificaciones.Any())
+                                        {
+                                            <div class="p-4 text-center text-muted">
+                                                <RadzenIcon Icon="done_all" Style="font-size: 2rem; color: #adb5bd;" Class="mb-1" />
+                                                <div class="small fw-semibold">No tienes notificaciones pendientes</div>
+                                                <div style="font-size: 0.75rem;" class="text-secondary">Te avisaremos cuando haya actualizaciones importantes de facturas o expedientes.</div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="list-group list-group-flush">
+                                                @foreach (var notif in notificaciones)
+                                                {
+                                                    <div class="list-group-item list-group-item-action p-2 px-3 d-flex align-items-start gap-2 border-bottom @(!notif.Leida ? "bg-light bg-opacity-75" : "")"
+                                                         style="cursor: pointer; transition: background 0.15s;"
+                                                         @onclick="@(() => AbrirNotificacionAsync(notif))">
+                                                        <div class="rounded-circle p-1 d-flex align-items-center justify-content-center mt-1 flex-shrink-0 @ObtenerClaseIconoNotif(notif.Tipo)"
+                                                             style="width: 32px; height: 32px;">
+                                                            <RadzenIcon Icon="@notif.Icono" Style="font-size: 1.05rem;" />
+                                                        </div>
+                                                        <div class="flex-grow-1 min-w-0">
+                                                            <div class="d-flex align-items-start justify-content-between gap-1 mb-1">
+                                                                <div class="fw-bold text-dark text-break" style="font-size: 0.82rem; line-height: 1.25;">
+                                                                    @notif.Titulo
+                                                                </div>
+                                                                @if (!notif.Leida)
+                                                                {
+                                                                    <span class="rounded-circle bg-primary d-inline-block mt-1 flex-shrink-0" style="width: 8px; height: 8px;" title="No leída"></span>
+                                                                }
+                                                            </div>
+                                                            <div class="text-secondary text-break mb-1" style="font-size: 0.76rem; line-height: 1.35;">
+                                                                @notif.Mensaje
+                                                            </div>
+                                                            <div class="text-muted d-flex align-items-center justify-content-between flex-wrap gap-1 mt-1" style="font-size: 0.68rem;">
+                                                                <span><RadzenIcon Icon="schedule" Style="font-size: 0.72rem;" Class="me-1 align-middle" />@FormatearTiempoRelativo(notif.FechaCreacion)</span>
+                                                                @if (!string.IsNullOrEmpty(notif.CreadoPor))
+                                                                {
+                                                                    <span class="text-truncate" style="max-width: 160px;">👤 @notif.CreadoPor</span>
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
                         </div>
 
                         <RadzenButton Icon="vpn_key" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
@@ -119,6 +218,30 @@
 </div>
 <RadzenComponents />
 
+<style>
+    @@keyframes pulso-campana {
+        0% { transform: rotate(0deg); }
+        15% { transform: rotate(14deg); }
+        30% { transform: rotate(-14deg); }
+        45% { transform: rotate(10deg); }
+        60% { transform: rotate(-10deg); }
+        75% { transform: rotate(4deg); }
+        100% { transform: rotate(0deg); }
+    }
+    .campana-notif-activa {
+        animation: pulso-campana 2.5s infinite ease-in-out;
+        color: #dc3545 !important;
+    }
+    @@keyframes badge-pulso {
+        0% { transform: translate(-50%, -50%) scale(1); }
+        50% { transform: translate(-50%, -50%) scale(1.18); }
+        100% { transform: translate(-50%, -50%) scale(1); }
+    }
+    .campana-badge-pulso {
+        animation: badge-pulso 2s infinite ease-in-out;
+    }
+</style>
+
 @code {
     private bool sidebarColapsado = false;
     private bool sidebarMovilAbierto = false;
@@ -126,6 +249,183 @@
     private string passActual = string.Empty;
     private string passNueva = string.Empty;
     private string passConfirmar = string.Empty;
+
+    // Notificaciones Internas Estilo Red Social en Tiempo Real
+    private bool mostrarMenuNotificaciones = false;
+    private int noLeidasCount = 0;
+    private List<NotificacionSistema> notificaciones = new();
+    private Guid? usuarioActualId;
+    private string? usuarioActualRol;
+    private string? usuarioActualNombre;
+    private CancellationTokenSource? _heartbeatCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarUsuarioYNotificacionesAsync();
+        NotificacionesService.OnNuevaNotificacion += OnNuevaNotificacionRecibidaAsync;
+        NotificacionesService.OnNotificacionesActualizadas += RecargarNotificacionesAsync;
+        _ = IniciarPollingRespaldoAsync();
+    }
+
+    private async Task IniciarPollingRespaldoAsync()
+    {
+        _heartbeatCts = new CancellationTokenSource();
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+            while (await timer.WaitForNextTickAsync(_heartbeatCts.Token))
+            {
+                await ActualizarListaNotificacionesAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch { }
+    }
+
+    private async Task CargarUsuarioYNotificacionesAsync()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var idStr = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (Guid.TryParse(idStr, out var uid))
+                {
+                    usuarioActualId = uid;
+                }
+                usuarioActualRol = user.FindFirst(ClaimTypes.Role)?.Value;
+                usuarioActualNombre = user.FindFirst(ClaimTypes.Name)?.Value 
+                    ?? user.FindFirst(ClaimTypes.GivenName)?.Value 
+                    ?? user.Identity.Name 
+                    ?? "";
+
+                await ActualizarListaNotificacionesAsync();
+            }
+        }
+        catch { }
+    }
+
+    private async Task ActualizarListaNotificacionesAsync()
+    {
+        if (usuarioActualId.HasValue || !string.IsNullOrEmpty(usuarioActualRol))
+        {
+            noLeidasCount = await NotificacionesService.ContarNoLeidasAsync(usuarioActualId, usuarioActualRol);
+            notificaciones = await NotificacionesService.ObtenerNotificacionesUsuarioAsync(usuarioActualId, usuarioActualRol, limite: 20);
+        }
+    }
+
+    private async Task RecargarNotificacionesAsync()
+    {
+        await ActualizarListaNotificacionesAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnNuevaNotificacionRecibidaAsync(NotificacionSistema notif)
+    {
+        // Verificar si la notificación corresponde a este usuario o a su rol
+        bool esParaMi = (usuarioActualId.HasValue && notif.UsuarioDestinoId == usuarioActualId.Value) ||
+                        (!string.IsNullOrEmpty(usuarioActualRol) && notif.RolDestino != null && (
+                            notif.RolDestino.Contains(usuarioActualRol) ||
+                            (usuarioActualRol == RolesSistema.SocioDirector && notif.RolDestino.Contains(RolesSistema.Finanzas))
+                        )) ||
+                        (notif.UsuarioDestinoId == null && string.IsNullOrEmpty(notif.RolDestino));
+
+        if (esParaMi)
+        {
+            await ActualizarListaNotificacionesAsync();
+            await InvokeAsync(StateHasChanged);
+
+            // Alerta flotante Toast en tiempo real si la notificación fue emitida por otro usuario o el sistema
+            bool generadaPorOtro = string.IsNullOrEmpty(notif.CreadoPor) || 
+                                   string.IsNullOrEmpty(usuarioActualNombre) || 
+                                   !notif.CreadoPor.Equals(usuarioActualNombre, StringComparison.OrdinalIgnoreCase);
+
+            if (generadaPorOtro)
+            {
+                var severity = notif.Tipo switch
+                {
+                    "Danger" => NotificationSeverity.Error,
+                    "Warning" => NotificationSeverity.Warning,
+                    "Success" => NotificationSeverity.Success,
+                    _ => NotificationSeverity.Info
+                };
+
+                await InvokeAsync(() =>
+                {
+                    NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = severity,
+                        Summary = notif.Titulo,
+                        Detail = notif.Mensaje,
+                        Duration = 8000
+                    });
+                });
+            }
+        }
+    }
+
+    private void ToggleMenuNotificaciones()
+    {
+        mostrarMenuNotificaciones = !mostrarMenuNotificaciones;
+    }
+
+    private void CerrarMenuNotificaciones()
+    {
+        mostrarMenuNotificaciones = false;
+    }
+
+    private async Task AbrirNotificacionAsync(NotificacionSistema notif)
+    {
+        if (!notif.Leida)
+        {
+            await NotificacionesService.MarcarComoLeidaAsync(notif.Id);
+            notif.Leida = true;
+            if (noLeidasCount > 0) noLeidasCount--;
+        }
+        mostrarMenuNotificaciones = false;
+        if (!string.IsNullOrWhiteSpace(notif.UrlDestino))
+        {
+            if (NavigationManager.Uri.EndsWith(notif.UrlDestino, StringComparison.OrdinalIgnoreCase))
+            {
+                NavigationManager.NavigateTo(notif.UrlDestino, forceLoad: true);
+            }
+            else
+            {
+                NavigationManager.NavigateTo(notif.UrlDestino);
+            }
+        }
+    }
+
+    private async Task MarcarTodasComoLeidasAsync()
+    {
+        await NotificacionesService.MarcarTodasComoLeidasAsync(usuarioActualId, usuarioActualRol);
+        foreach (var n in notificaciones)
+        {
+            n.Leida = true;
+        }
+        noLeidasCount = 0;
+    }
+
+    private string ObtenerClaseIconoNotif(string tipo) => tipo switch
+    {
+        "Success" => "bg-success bg-opacity-10 text-success",
+        "Warning" => "bg-warning bg-opacity-10 text-warning",
+        "Danger" => "bg-danger bg-opacity-10 text-danger",
+        _ => "bg-primary bg-opacity-10 text-primary"
+    };
+
+    private string FormatearTiempoRelativo(DateTime fechaUtc)
+    {
+        var diff = DateTime.UtcNow - fechaUtc;
+        if (diff.TotalSeconds < 60) return "Hace un momento";
+        if (diff.TotalMinutes < 60) return $"Hace {(int)diff.TotalMinutes} min";
+        if (diff.TotalHours < 24) return $"Hace {(int)diff.TotalHours} h";
+        if (diff.TotalDays < 7) return $"Hace {(int)diff.TotalDays} d";
+        return fechaUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm");
+    }
 
     private void ToggleSidebar()
     {
@@ -175,5 +475,18 @@
                 NotificationService.Notify(NotificationSeverity.Error, "Error", res.Error ?? "No se pudo actualizar la contraseña.");
             }
         }
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            _heartbeatCts?.Cancel();
+            _heartbeatCts?.Dispose();
+        }
+        catch { }
+
+        NotificacionesService.OnNuevaNotificacion -= OnNuevaNotificacionRecibidaAsync;
+        NotificacionesService.OnNotificacionesActualizadas -= RecargarNotificacionesAsync;
     }
 }

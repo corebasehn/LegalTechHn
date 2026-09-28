@@ -55,6 +55,7 @@ builder.Services.AddScoped<LitigioService>();
 builder.Services.AddScoped<FacturacionService>();
 builder.Services.AddScoped<ConfiguracionService>();
 builder.Services.AddScoped<DocumentoService>();
+builder.Services.AddSingleton<NotificacionesAppService>();
 
 var app = builder.Build();
 
@@ -243,6 +244,23 @@ using (var scope = app.Services.CreateScope())
             ""Detalle"" TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS ""IX_AuditoriasAcceso_Fecha"" ON ""AuditoriasAcceso"" (""Fecha"");
+    ");
+
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS ""Notificaciones"" (
+            ""Id"" TEXT NOT NULL CONSTRAINT ""PK_Notificaciones"" PRIMARY KEY,
+            ""UsuarioDestinoId"" TEXT NULL,
+            ""RolDestino"" TEXT NULL,
+            ""Titulo"" TEXT NOT NULL,
+            ""Mensaje"" TEXT NOT NULL,
+            ""Tipo"" TEXT NOT NULL,
+            ""Icono"" TEXT NOT NULL,
+            ""UrlDestino"" TEXT NULL,
+            ""Leida"" INTEGER NOT NULL,
+            ""FechaCreacion"" TEXT NOT NULL,
+            ""CreadoPor"" TEXT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_Notificaciones_Leida_FechaCreacion"" ON ""Notificaciones"" (""Leida"", ""FechaCreacion"");
     ");
 
     // Si la tabla de feriados está vacía, poblar los feriados oficiales hondureños

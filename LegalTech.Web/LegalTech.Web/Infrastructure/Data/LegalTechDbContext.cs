@@ -34,6 +34,7 @@ public class LegalTechDbContext : DbContext
     public DbSet<DocumentoExpediente> DocumentosExpediente => Set<DocumentoExpediente>();
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<AuditoriaAcceso> AuditoriasAcceso => Set<AuditoriaAcceso>();
+    public DbSet<NotificacionSistema> Notificaciones => Set<NotificacionSistema>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -502,6 +503,20 @@ public class LegalTechDbContext : DbContext
             entity.Property(a => a.Navegador).HasMaxLength(250);
             entity.Property(a => a.Detalle).IsRequired().HasMaxLength(300);
             entity.HasIndex(a => a.Fecha);
+        });
+
+        // Notificaciones Internas del Sistema
+        modelBuilder.Entity<NotificacionSistema>(entity =>
+        {
+            entity.HasKey(n => n.Id);
+            entity.Property(n => n.Titulo).IsRequired().HasMaxLength(150);
+            entity.Property(n => n.Mensaje).IsRequired().HasMaxLength(500);
+            entity.Property(n => n.Icono).HasMaxLength(50);
+            entity.Property(n => n.Tipo).HasMaxLength(30);
+            entity.Property(n => n.UrlDestino).HasMaxLength(250);
+            entity.Property(n => n.RolDestino).HasMaxLength(100);
+            entity.Property(n => n.CreadoPor).HasMaxLength(150);
+            entity.HasIndex(n => new { n.Leida, n.FechaCreacion });
         });
     }
 }

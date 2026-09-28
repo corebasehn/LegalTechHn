@@ -252,9 +252,23 @@
                 <RadzenDataGrid Data="@expedientesFiltrados" TItem="Expediente" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="8" 
                                 FilterMode="FilterMode.SimpleWithMenu" 
                                 EmptyText="@(filtroSemaforo != "todos" ? $"No se encontraron expedientes con el filtro '{ObtenerTituloFiltro()}'." : "No hay expedientes marcarios registrados aún.")" 
-                                RowSelect="@((Expediente e) => NavigationManager.NavigateTo($"/expedientes/{e.Id}"))"
-                                Style="min-width: 1060px; width: 100%; cursor: pointer;">
+                                Style="min-width: 1060px; width: 100%;">
                     <Columns>
+                        <RadzenDataGridColumn TItem="Expediente" Title="Acciones" Width="135px" TextAlign="TextAlign.Center" Sortable="false" Filterable="false">
+                            <Template Context="e">
+                                <div @onclick:stopPropagation="true">
+                                    <RadzenSplitButton Text="Acciones" Icon="more_vert" Size="ButtonSize.ExtraSmall" ButtonStyle="ButtonStyle.Light" AlwaysOpenPopup="true"
+                                                       Click="@((RadzenSplitButtonItem args) => ManejarAccionExpediente(args, e))">
+                                        <ChildContent>
+                                            <RadzenSplitButtonItem Text="Ver Ficha" Value="ficha" Icon="visibility" />
+                                            <RadzenSplitButtonItem Text="Nueva Factura" Value="factura" Icon="receipt_long" />
+                                            <RadzenSplitButtonItem Text="Litigio / Oposición" Value="litigio" Icon="gavel" />
+                                        </ChildContent>
+                                    </RadzenSplitButton>
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+
                         <RadzenDataGridColumn TItem="Expediente" Property="CodigoInterno" Title="Código" Width="145px">
                             <Template Context="e">
                                 <a href="@($"/expedientes/{e.Id}")" class="badge bg-dark font-monospace text-decoration-none" title="Ver ficha del expediente" 
@@ -345,13 +359,6 @@
                             <Template Context="e">
                                 <span title="Timbre L 50.00" class="badge @(e.TimbreL50Pagado ? "bg-success" : "bg-secondary")" style="font-size: 0.65rem;">L50</span>
                                 <span title="20 Etiquetas Físicas 2x4" class="badge @(e.EtiquetasFisicas2x4Entregadas ? "bg-success" : "bg-secondary")" style="font-size: 0.65rem;">20 ETIQ</span>
-                            </Template>
-                        </RadzenDataGridColumn>
-
-                        <RadzenDataGridColumn TItem="Expediente" Title="Acción" Width="100px" TextAlign="TextAlign.Center">
-                            <Template Context="e">
-                                <RadzenButton Icon="visibility" Text="Ficha" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
-                                              Click="@(() => NavigationManager.NavigateTo($"/expedientes/{e.Id}"))" />
                             </Template>
                         </RadzenDataGridColumn>
                     </Columns>
@@ -590,5 +597,21 @@
             "secondary" => BadgeStyle.Secondary,
             _ => BadgeStyle.Primary
         };
+    }
+
+    private void ManejarAccionExpediente(RadzenSplitButtonItem item, Expediente e)
+    {
+        switch (item?.Value?.ToString())
+        {
+            case "ficha":
+                NavigationManager.NavigateTo($"/expedientes/{e.Id}");
+                break;
+            case "factura":
+                NavigationManager.NavigateTo($"/facturacion?expedienteId={e.Id}&nueva=true");
+                break;
+            case "litigio":
+                NavigationManager.NavigateTo("/litigios");
+                break;
+        }
     }
 }
