@@ -26,6 +26,10 @@ public class LegalTechDbContext : DbContext
     public DbSet<CertificadoRegistro> Certificados => Set<CertificadoRegistro>();
     public DbSet<PlazoLegal> PlazosLegales => Set<PlazoLegal>();
     public DbSet<FeriadoNacional> FeriadosNacionales => Set<FeriadoNacional>();
+    public DbSet<ParametroFiscal> ParametrosFiscales => Set<ParametroFiscal>();
+    public DbSet<TarifaArancelaria> TarifasArancelarias => Set<TarifaArancelaria>();
+    public DbSet<FacturaCobro> Facturas => Set<FacturaCobro>();
+    public DbSet<DetalleFacturaCobro> DetallesFactura => Set<DetalleFacturaCobro>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -290,6 +294,100 @@ public class LegalTechDbContext : DbContext
                 new FeriadoNacional { Id = 19, Fecha = new DateTime(2027, 10, 7), Nombre = "Feriado Morazánico 2027 (Jueves)", FundamentoLegal = "Decreto Leg. 78-2015", EsFijoAnual = false, Activo = true },
                 new FeriadoNacional { Id = 20, Fecha = new DateTime(2027, 10, 8), Nombre = "Feriado Morazánico 2027 (Viernes)", FundamentoLegal = "Decreto Leg. 78-2015", EsFijoAnual = false, Activo = true }
             );
+        });
+
+        // 7. Catálogo de Parámetros Fiscales y Tasas Oficiales (Parametrizable)
+        modelBuilder.Entity<ParametroFiscal>(entity =>
+        {
+            entity.HasKey(pf => pf.Id);
+            entity.Property(pf => pf.Clave).IsRequired().HasMaxLength(100);
+            entity.Property(pf => pf.Nombre).IsRequired().HasMaxLength(200);
+            entity.Property(pf => pf.Valor).IsRequired().HasMaxLength(200);
+            entity.Property(pf => pf.TipoDato).HasMaxLength(50);
+            entity.Property(pf => pf.Categoria).HasMaxLength(100);
+
+            entity.HasData(
+                new ParametroFiscal { Id = 1, Clave = "ISV_PORCENTAJE", Nombre = "Porcentaje Impuesto sobre Ventas (ISV)", Valor = "15.00", TipoDato = "decimal", Categoria = "Impuestos", Descripcion = "Tasa general del 15% sobre honorarios profesionales de servicios legales", Activo = true },
+                new ParametroFiscal { Id = 2, Clave = "TASA_CAMBIO_USD_HNL", Nombre = "Tasa de Cambio Oficial (USD a HNL)", Valor = "25.50", TipoDato = "decimal", Categoria = "Divisas", Descripcion = "Tipo de cambio de referencia del Banco Central de Honduras (BCH)", Activo = true },
+                new ParametroFiscal { Id = 3, Clave = "TIMBRE_CONTRATACION_HNL", Nombre = "Timbre de Contratación (Colegio de Abogados)", Valor = "50.00", TipoDato = "decimal", Categoria = "Tasas Oficiales", Descripcion = "Timbre obligatorio del CAH por cada solicitud presentada en ventanilla", Activo = true },
+                new ParametroFiscal { Id = 4, Clave = "TASA_SOLICITUD_DIGEPIH_HNL", Nombre = "Tasa Oficial de Presentación DIGEPIH", Valor = "700.00", TipoDato = "decimal", Categoria = "Tasas Oficiales", Descripcion = "Tasa gubernamental de radicación de solicitud por cada clase Niza", Activo = true },
+                new ParametroFiscal { Id = 5, Clave = "TASA_REGISTRO_TITULO_HNL", Nombre = "Tasa Oficial de Emisión de Certificado", Valor = "500.00", TipoDato = "decimal", Categoria = "Tasas Oficiales", Descripcion = "Tasa oficial ante DIGEPIH por emisión del título de concesión", Activo = true },
+                new ParametroFiscal { Id = 6, Clave = "TASA_PUBLICACION_ENAG_HNL", Nombre = "Tasa de Publicación en La Gaceta (ENAG)", Valor = "650.00", TipoDato = "decimal", Categoria = "Tasas Oficiales", Descripcion = "Pago a la Empresa Nacional de Artes Gráficas por los 3 avisos de ley", Activo = true },
+                new ParametroFiscal { Id = 7, Clave = "CAI_SAR_AUTORIZADO", Nombre = "Código de Autorización de Impresión (CAI)", Valor = "A84F2B-98CE21-1B4480-1498B2-FA8321-44", TipoDato = "string", Categoria = "Facturación SAR", Descripcion = "Régimen de facturación autorizado por el Servicio de Administración de Rentas", Activo = true },
+                new ParametroFiscal { Id = 8, Clave = "FECHA_LIMITE_SAR", Nombre = "Fecha Límite de Emisión de Facturas", Valor = "2027-12-31", TipoDato = "date", Categoria = "Facturación SAR", Descripcion = "Fecha máxima de vigencia del rango de facturación asignado por SAR", Activo = true }
+            );
+        });
+
+        // 8. Catálogo de Tarifas Arancelarias y Honorarios Profesionales (Parametrizable)
+        modelBuilder.Entity<TarifaArancelaria>(entity =>
+        {
+            entity.HasKey(ta => ta.Id);
+            entity.Property(ta => ta.Concepto).IsRequired().HasMaxLength(250);
+            entity.Property(ta => ta.EtapaProcesal).IsRequired().HasMaxLength(100);
+            entity.Property(ta => ta.HonorariosHNL).HasPrecision(18, 2);
+            entity.Property(ta => ta.HonorariosUSD).HasPrecision(18, 2);
+            entity.Property(ta => ta.GastosOficialesHNL).HasPrecision(18, 2);
+            entity.Property(ta => ta.GastosOficialesUSD).HasPrecision(18, 2);
+
+            entity.HasData(
+                new TarifaArancelaria { Id = 1, Concepto = "Búsqueda Preliminar de Antecedentes y Dictamen", EtapaProcesal = "Apertura", HonorariosHNL = 2500.00m, HonorariosUSD = 100.00m, GastosOficialesHNL = 0.00m, GastosOficialesUSD = 0.00m, AplicaISV = true, Descripcion = "Análisis fonético, visual y conceptual previo en base de datos DIGEPIH", Activo = true },
+                new TarifaArancelaria { Id = 2, Concepto = "Solicitud y Trámite Completo de Registro (por Clase Niza)", EtapaProcesal = "Presentación", HonorariosHNL = 8500.00m, HonorariosUSD = 350.00m, GastosOficialesHNL = 1400.00m, GastosOficialesUSD = 55.00m, AplicaISV = true, Descripcion = "Incluye radicación, timbres CAH (L 50), tasa DIGEPIH (L 700) y La Gaceta (L 650)", Activo = true },
+                new TarifaArancelaria { Id = 3, Concepto = "Contestación de Prevención de Forma (30 días)", EtapaProcesal = "Examen", HonorariosHNL = 3500.00m, HonorariosUSD = 140.00m, GastosOficialesHNL = 50.00m, GastosOficialesUSD = 2.00m, AplicaISV = true, Descripcion = "Subsanación de requisitos formales, clasificación de Niza o poderes", Activo = true },
+                new TarifaArancelaria { Id = 4, Concepto = "Contestación de Objeción de Fondo (60 días)", EtapaProcesal = "Examen", HonorariosHNL = 7000.00m, HonorariosUSD = 280.00m, GastosOficialesHNL = 50.00m, GastosOficialesUSD = 2.00m, AplicaISV = true, Descripcion = "Defensa jurídica ante reparos de distintividad o semejanza (Arts. 83 y 84 LPI)", Activo = true },
+                new TarifaArancelaria { Id = 5, Concepto = "Gestión de Publicaciones y Depósito de Diarios Físicos", EtapaProcesal = "Publicación", HonorariosHNL = 2000.00m, HonorariosUSD = 80.00m, GastosOficialesHNL = 650.00m, GastosOficialesUSD = 25.00m, AplicaISV = true, Descripcion = "Seguimiento a 3 avisos ENAG y entrega de ejemplares físicos para evitar abandono", Activo = true },
+                new TarifaArancelaria { Id = 6, Concepto = "Defensa ante Oposición de Terceros (10 días)", EtapaProcesal = "Oposición", HonorariosHNL = 10000.00m, HonorariosUSD = 400.00m, GastosOficialesHNL = 50.00m, GastosOficialesUSD = 2.00m, AplicaISV = true, Descripcion = "Contestación, evacuación de medios probatorios y conclusiones de primera instancia", Activo = true },
+                new TarifaArancelaria { Id = 7, Concepto = "Interposición de Oposición en Ataque (30 días)", EtapaProcesal = "Oposición", HonorariosHNL = 12000.00m, HonorariosUSD = 480.00m, GastosOficialesHNL = 500.00m, GastosOficialesUSD = 20.00m, AplicaISV = true, Descripcion = "Oposición contra solicitud lesiva de tercero publicada en La Gaceta", Activo = true },
+                new TarifaArancelaria { Id = 8, Concepto = "Concesión, Certificado Oficial y Solvencia P360", EtapaProcesal = "Concesión", HonorariosHNL = 3000.00m, HonorariosUSD = 120.00m, GastosOficialesHNL = 500.00m, GastosOficialesUSD = 20.00m, AplicaISV = true, Descripcion = "Retiro de certificado original de DIGEPIH, auditoría P360 y custodia en bóveda", Activo = true },
+                new TarifaArancelaria { Id = 9, Concepto = "Acción de Cancelación por No Uso (3 años)", EtapaProcesal = "Litigios", HonorariosHNL = 12500.00m, HonorariosUSD = 500.00m, GastosOficialesHNL = 750.00m, GastosOficialesUSD = 30.00m, AplicaISV = true, Descripcion = "Auditoría en redes sociales, constancia de no rehabilitación y demanda de cancelación", Activo = true },
+                new TarifaArancelaria { Id = 10, Concepto = "Acción de Nulidad de Registro Marcario", EtapaProcesal = "Litigios", HonorariosHNL = 15000.00m, HonorariosUSD = 600.00m, GastosOficialesHNL = 1000.00m, GastosOficialesUSD = 40.00m, AplicaISV = true, Descripcion = "Demanda por registro otorgado en contravención a la Ley de Propiedad Industrial", Activo = true },
+                new TarifaArancelaria { Id = 11, Concepto = "Recurso de Reposición (10 días) / Apelación (3 días)", EtapaProcesal = "Litigios", HonorariosHNL = 8000.00m, HonorariosUSD = 320.00m, GastosOficialesHNL = 100.00m, GastosOficialesUSD = 4.00m, AplicaISV = true, Descripcion = "Impugnación administrativa ante DIGEPIH y Superintendencia de Recursos", Activo = true }
+            );
+        });
+
+        // Facturación y Cobranzas
+        modelBuilder.Entity<FacturaCobro>(entity =>
+        {
+            entity.HasKey(f => f.Id);
+            entity.Property(f => f.NumeroFactura).IsRequired().HasMaxLength(50);
+            entity.Property(f => f.NumeroCAI).HasMaxLength(100);
+            entity.Property(f => f.Moneda).IsRequired().HasMaxLength(10);
+            entity.Property(f => f.TasaCambio).HasPrecision(18, 4);
+            entity.Property(f => f.SubtotalHonorarios).HasPrecision(18, 2);
+            entity.Property(f => f.SubtotalGastosOficiales).HasPrecision(18, 2);
+            entity.Property(f => f.MontoISV).HasPrecision(18, 2);
+            entity.Property(f => f.TotalFactura).HasPrecision(18, 2);
+            entity.Property(f => f.MontoPagado).HasPrecision(18, 2);
+            entity.Property(f => f.SaldoPendiente).HasPrecision(18, 2);
+
+            entity.HasOne(f => f.Cliente)
+                  .WithMany()
+                  .HasForeignKey(f => f.ClienteId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(f => f.Expediente)
+                  .WithMany()
+                  .HasForeignKey(f => f.ExpedienteId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(f => f.Detalles)
+                  .WithOne(d => d.Factura)
+                  .HasForeignKey(d => d.FacturaId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DetalleFacturaCobro>(entity =>
+        {
+            entity.HasKey(d => d.Id);
+            entity.Property(d => d.Concepto).IsRequired().HasMaxLength(250);
+            entity.Property(d => d.PrecioUnitario).HasPrecision(18, 2);
+            entity.Property(d => d.Subtotal).HasPrecision(18, 2);
+            entity.Property(d => d.MontoISV).HasPrecision(18, 2);
+            entity.Property(d => d.TotalLinea).HasPrecision(18, 2);
+
+            entity.HasOne(d => d.TarifaArancelaria)
+                  .WithMany()
+                  .HasForeignKey(d => d.TarifaArancelariaId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

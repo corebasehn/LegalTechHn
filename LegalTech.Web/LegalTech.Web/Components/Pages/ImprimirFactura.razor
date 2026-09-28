@@ -1,0 +1,651 @@
+@page "/facturacion/imprimir/{Id:guid}"
+@layout LegalTech.Web.Components.Layout.EmptyLayout
+@rendermode InteractiveServer
+@using LegalTech.Web.Domain.Entities
+@using LegalTech.Web.Domain.Enums
+@using LegalTech.Web.Services
+@inject FacturacionService FacturacionService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>@(factura == null ? "Cargando Factura..." : $"{(factura.EsProforma ? "Proforma" : "Factura")} {factura.NumeroFactura} - SAR LegalTech")</PageTitle>
+
+<!-- BARRA DE ACCIONES SUPERIOR (OCULTA EN IMPRESIÓN) -->
+<div class="no-print bg-light border-bottom p-2 px-4 d-flex align-items-center justify-content-between shadow-sm">
+    <div class="d-flex align-items-center gap-2">
+        <RadzenButton Icon="arrow_back" Text="Volver a Facturación" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" 
+                      Click="@(() => NavigationManager.NavigateTo("/facturacion"))" />
+        <span class="badge @(factura?.EsProforma == true ? "bg-warning text-dark" : "bg-primary text-white")">
+            @(factura?.EsProforma == true ? "Documento Proforma" : "Factura Fiscal SAR")
+        </span>
+        <strong class="font-monospace ms-2">@(factura?.NumeroFactura ?? "")</strong>
+    </div>
+
+    <div class="d-flex align-items-center gap-2">
+        <RadzenButton Icon="print" Text="Imprimir Documento (Tamaño Carta)" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" 
+                      Click="@Imprimir" Class="fw-bold px-3 shadow-sm" />
+    </div>
+</div>
+
+@if (cargando)
+{
+    <div class="p-5 text-center">
+        <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" Class="mb-3" />
+        <span class="text-muted">Cargando comprobante fiscal para impresión...</span>
+    </div>
+}
+else if (factura == null)
+{
+    <div class="p-5 text-center">
+        <div class="alert alert-danger d-inline-block">
+            No se encontró el comprobante o factura fiscal solicitado.
+        </div>
+        <div class="mt-2">
+            <RadzenButton Icon="arrow_back" Text="Regresar" ButtonStyle="ButtonStyle.Primary" 
+                          Click="@(() => NavigationManager.NavigateTo("/facturacion"))" />
+        </div>
+    </div>
+}
+else
+{
+    <div class="p-2 p-md-3">
+        <div class="documento-fiscal-carta" id="seccion-comprobante-fiscal">
+            <!-- 1. ENCABEZADO TRIBUTARIO SAR DEL EMISOR -->
+            <div class="encabezado-fiscal">
+                <div class="row align-items-center g-2">
+                    <div class="col-7">
+                        <h4 class="m-0 text-primary fw-bold" style="font-size: 13pt;">@nombreEmisor</h4>
+                        <div class="text-secondary fw-semibold mb-1" style="font-size: 8pt;">
+                            Bufete Jurídico Especializado en Propiedad Intelectual y Asuntos Corporativos
+                        </div>
+                        <div style="font-size: 8pt;">
+                            <strong>RTN DEL EMISOR:</strong> <span class="font-monospace fw-bold text-primary">@rtnEmisor</span>
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success ms-1" style="font-size: 6.5pt;">✓ Registrado SAR</span>
+                        </div>
+                        <div class="text-muted" style="font-size: 7.5pt; margin-top: 2px;">
+                            @direccionEmisor
+                        </div>
+                        <div class="text-muted" style="font-size: 7.5pt;">
+                            Tel: @telefonoEmisor • Correo: @correoEmisor
+                        </div>
+                    </div>
+
+                    <div class="col-5">
+                        <div class="cuadro-cai">
+                            <div class="badge-tipo-doc @(factura.EsProforma ? "bg-warning text-dark" : "bg-primary text-white")">
+                                @(factura.EsProforma ? "DOCUMENTO PROFORMA" : "FACTURA")
+                            </div>
+                            <div class="font-monospace fw-bold text-dark my-1" style="font-size: 13pt;">@factura.NumeroFactura</div>
+                            
+                            @if (!factura.EsProforma)
+                            {
+                                <div class="border-top pt-1 mt-1 text-start" style="font-size: 7.5pt;">
+                                    <div class="text-truncate mb-1">
+                                        <strong>CAI:</strong> 
+                                        <span class="font-monospace text-primary fw-bold" style="font-size: 7pt;" title="@(factura.NumeroCAI ?? caiAutorizado)">
+                                            @(factura.NumeroCAI ?? caiAutorizado)
+                                        </span>
+                                    </div>
+                                    <div class="mb-1" style="font-size: 7pt;">
+                                        <strong class="text-muted">Rango:</strong> @rangoAutorizado
+                                    </div>
+                                    <div style="font-size: 7.5pt;">
+                                        <strong class="text-muted">Límite Emisión:</strong> <strong class="text-danger">@fechaLimiteEmision</strong>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="border-top pt-1 mt-1 text-muted text-center font-monospace" style="font-size: 7pt;">
+                                    * DOCUMENTO PRELIMINAR SIN VALOR FISCAL *
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. DATOS OBLIGATORIOS DEL RECEPTOR / CLIENTE -->
+            <div class="caja-datos-receptor">
+                <div class="row g-2">
+                    <div class="col-6 border-end" style="padding-right: 12px;">
+                        <div class="fw-bold text-secondary text-uppercase border-bottom pb-1 mb-1" style="font-size: 7pt;">
+                            Datos Obligatorios del Receptor / Cliente
+                        </div>
+                        <div style="font-size: 8pt; margin-bottom: 2px;">
+                            <span class="text-muted">Nombre o Razón Social:</span> <strong>@factura.Cliente.NombreRazonSocial</strong>
+                        </div>
+                        <div style="font-size: 8pt; margin-bottom: 2px;">
+                            <span class="text-muted">RTN del Receptor:</span> 
+                            <strong class="font-monospace text-primary">
+                                @(string.IsNullOrWhiteSpace(factura.Cliente.NumeroIdentificacionRTN) ? "Consumidor Final" : factura.Cliente.NumeroIdentificacionRTN)
+                            </strong>
+                        </div>
+                        <div class="text-muted" style="font-size: 7.5pt;">
+                            Dirección Fiscal: @(factura.Cliente.DireccionExacta ?? "Tegucigalpa, Honduras")
+                        </div>
+                    </div>
+
+                    <div class="col-6" style="padding-left: 12px;">
+                        <div class="fw-bold text-secondary text-uppercase border-bottom pb-1 mb-1" style="font-size: 7pt;">
+                            Datos de la Transacción y Expediente
+                        </div>
+                        <div class="row g-1" style="font-size: 8pt;">
+                            <div class="col-6">
+                                <span class="text-muted">Fecha Emisión:</span> <strong class="font-monospace">@factura.FechaEmision.ToString("dd/MM/yyyy")</strong>
+                            </div>
+                            <div class="col-6">
+                                <span class="text-muted">Vencimiento:</span> <strong class="text-danger font-monospace">@factura.FechaVencimiento.ToString("dd/MM/yyyy")</strong>
+                            </div>
+                            <div class="col-12 border-top pt-1 mt-1">
+                                <span class="text-muted">Expediente:</span>
+                                @if (factura.Expediente != null)
+                                {
+                                    <strong class="text-primary">
+                                        @factura.Expediente.CodigoInterno - @factura.Expediente.DenominacionMarca (Clase @factura.Expediente.ClaseNiza)
+                                    </strong>
+                                    <div class="text-muted" style="font-size: 7pt;">
+                                        Hito: @(factura.HitoProcesal ?? "General") • Moneda: <strong>@factura.Moneda</strong>
+                                        @if (factura.Moneda == "USD")
+                                        {
+                                            <span class="ms-1">TC BCH: L. @factura.TasaCambio.ToString("N2")</span>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted font-italic">Servicios Profesionales de PI • Moneda: <strong>@factura.Moneda</strong></span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. DETALLE DE BIENES Y SERVICIOS VENDIDOS (FORMATO REGLAMENTARIO SAR) -->
+            <table class="tabla-sar">
+                <thead>
+                    <tr>
+                        <th style="width: 32px;">Cant</th>
+                        <th>Descripción del Bien / Servicio Prestado</th>
+                        <th style="width: 110px;">Clasificación Fiscal</th>
+                        <th style="width: 75px; text-align: right;">Precio Unit.</th>
+                        <th style="width: 50px; text-align: right;">Desc.</th>
+                        <th style="width: 75px; text-align: right;">Base Impon.</th>
+                        <th style="width: 65px; text-align: center;">Tasa ISV</th>
+                        <th style="width: 70px; text-align: right;">ISV Desgl.</th>
+                        <th style="width: 80px; text-align: right;">Total Línea</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in factura.Detalles)
+                    {
+                        <tr>
+                            <td style="text-align: center; font-family: monospace;">@d.Cantidad</td>
+                            <td>
+                                <div style="font-weight: 600; color: #111;">@d.Concepto</div>
+                                <div style="font-size: 7pt; color: #6c757d;">
+                                    @(d.EsGastoOficial ? "Gasto Oficial: Tasas gubernamentales DIGEPIH / ENAG / Timbre CAH" : "Honorarios Legales Profesionales de Representación")
+                                </div>
+                            </td>
+                            <td style="text-align: center;">
+                                <span class="badge @(d.EsGastoOficial ? "bg-secondary text-white" : "bg-primary text-white")" style="font-size: 6.5pt;">
+                                    @(d.EsGastoOficial ? "Gasto Exento (0%)" : "Honorario (15%)")
+                                </span>
+                            </td>
+                            <td style="text-align: right; font-family: monospace;">@factura.Moneda @d.PrecioUnitario.ToString("N2")</td>
+                            <td style="text-align: right; font-family: monospace; color: #6c757d;">0.00</td>
+                            <td style="text-align: right; font-family: monospace;">@factura.Moneda @d.Subtotal.ToString("N2")</td>
+                            <td style="text-align: center; font-family: monospace; font-size: 7.5pt;">
+                                @(d.EsGastoOficial ? "0.00%" : $"{tasaISVActual * 100:0.##}%")
+                            </td>
+                            <td style="text-align: right; font-family: monospace;">@factura.Moneda @d.MontoISV.ToString("N2")</td>
+                            <td style="text-align: right; font-family: monospace; font-weight: bold;">@factura.Moneda @d.TotalLinea.ToString("N2")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <!-- 4. CUADRO DE LIQUIDACIÓN TRIBUTARIA Y RESUMEN SAR -->
+            <div class="resumen-inferior">
+                <!-- COLUMNA IZQUIERDA: TOTAL EN LETRAS, LEYENDAS SAR Y SOLVENCIA P360 -->
+                <div>
+                    <!-- TOTAL EN LETRAS (MANDATORIO SAR) -->
+                    <div class="caja-letras">
+                        <div class="text-muted fw-bold" style="font-size: 7pt; margin-bottom: 2px;">TOTAL EN LETRAS (MANDATORIO SAR):</div>
+                        <div class="font-monospace fw-bold text-dark text-uppercase" style="font-size: 8pt;">
+                            @FacturacionService.ConvertirNumeroALetras(factura.TotalFactura, factura.Moneda)
+                        </div>
+                    </div>
+
+                    <!-- LEYENDAS Y CONTROL DE REGÍMENES FISCALES SAR -->
+                    <div class="caja-leyenda-sar">
+                        <div class="text-center fw-bold text-dark font-monospace border-bottom pb-1 mb-1" style="font-size: 7.5pt;">
+                            "LA FACTURA ES BENEFICIO DE TODOS, ¡EXÍJALA!"
+                        </div>
+                        <div class="row g-1" style="font-size: 6.5pt;">
+                            <div class="col-6">Orden Compra Exenta: <strong>N/A</strong></div>
+                            <div class="col-6">Constancia Reg. Exonerado: <strong>N/A</strong></div>
+                            <div class="col-6">Identificativo Reg. SAG: <strong>N/A</strong></div>
+                            <div class="col-6">Régimen: <strong>Autoimpresor LegalTech v2.0</strong></div>
+                        </div>
+                    </div>
+
+                    <!-- CERTIFICACIÓN DE SOLVENCIA P360 (MANUAL DE MARCAS PÁRRAFO 360) -->
+                    @if (factura.Expediente != null)
+                    {
+                        @if (factura.EsProforma)
+                        {
+                            <div class="caja-p360 border bg-light text-secondary">
+                                <div class="fw-bold mb-1" style="font-size: 7.5pt;">🛡️ PROFORMA EN TRÁMITE - SIN BLOQUEO P360</div>
+                                <div style="font-size: 7pt;" class="text-muted">
+                                    Cotización preliminar sin timbrado SAR. No genera pasivo exigible que limite el retiro del título en bóveda.
+                                </div>
+                            </div>
+                        }
+                        else if (factura.SaldoPendiente == 0)
+                        {
+                            <div class="caja-p360 p360-solvente">
+                                <div class="fw-bold mb-1" style="font-size: 7.5pt;">🛡️ SOLVENCIA P360 ACREDITADA - TÍTULO HABILITADO</div>
+                                <div style="font-size: 7pt;">
+                                    Expediente solvente en L. 0.00. El certificado original de registro puede ser retirado de bóveda y entregado al titular.
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="caja-p360 p360-bloqueado">
+                                <div class="fw-bold mb-1" style="font-size: 7.5pt;">🛡️ COMPUERTA P360: SALDO PENDIENTE (BLOQUEADO)</div>
+                                <div style="font-size: 7pt;">
+                                    El Manual de Marcas (Párrafo 360) prohíbe entregar el título original hasta saldar @factura.Moneda @factura.SaldoPendiente.ToString("N2").
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <!-- COLUMNA DERECHA: LIQUIDACIÓN FISCAL SAR -->
+                <div class="cuadro-liquidacion">
+                    <div class="fw-bold text-uppercase text-primary border-bottom pb-1 mb-1 d-flex justify-content-between" style="font-size: 7.5pt;">
+                        <span>Liquidación Fiscal SAR</span>
+                        <span class="text-muted" style="font-size: 6.5pt;">Valores en @factura.Moneda</span>
+                    </div>
+                    
+                    <div class="fila-liquidacion">
+                        <span class="text-muted">Importe Exento (Tasas Oficiales 0% ISV):</span>
+                        <span class="font-monospace">@factura.Moneda @factura.SubtotalGastosOficiales.ToString("N2")</span>
+                    </div>
+                    <div class="fila-liquidacion">
+                        <span class="text-muted">Importe Exonerado:</span>
+                        <span class="font-monospace text-muted">@factura.Moneda 0.00</span>
+                    </div>
+                    <div class="fila-liquidacion">
+                        <span class="text-muted">Importe Gravado al 15% (Honorarios):</span>
+                        <span class="font-monospace">@factura.Moneda @factura.SubtotalHonorarios.ToString("N2")</span>
+                    </div>
+                    <div class="fila-liquidacion">
+                        <span class="text-muted">Importe Gravado al 18%:</span>
+                        <span class="font-monospace text-muted">@factura.Moneda 0.00</span>
+                    </div>
+
+                    <!-- BASE IMPONIBLE TOTAL (PRECIO SIN ISV) -->
+                    <div class="fila-liquidacion fila-destacada">
+                        <span class="fw-bold">Base Imponible Total (Precio sin ISV):</span>
+                        <span class="font-monospace fw-bold">
+                            @factura.Moneda @((factura.SubtotalHonorarios + factura.SubtotalGastosOficiales).ToString("N2"))
+                        </span>
+                    </div>
+
+                    <!-- TASA DE ISV APLICADA (15%) -->
+                    <div class="fila-liquidacion">
+                        <span class="text-primary fw-semibold">★ Tasa de ISV Aplicada:</span>
+                        <span class="badge bg-primary" style="font-size: 6.5pt;">15.00%</span>
+                    </div>
+
+                    <!-- MONTO DE ISV DESGLOSADO -->
+                    <div class="fila-liquidacion fila-destacada">
+                        <span class="text-primary fw-bold">★ Impuesto sobre Ventas (ISV 15% Desglosado):</span>
+                        <strong class="font-monospace text-primary">@factura.Moneda @factura.MontoISV.ToString("N2")</strong>
+                    </div>
+
+                    <!-- TOTAL A PAGAR (BASE + ISV = TOTAL) -->
+                    <div class="fila-liquidacion fila-total">
+                        <span>TOTAL A PAGAR (Base + ISV):</span>
+                        <strong class="font-monospace" style="font-size: 10pt;">@factura.Moneda @factura.TotalFactura.ToString("N2")</strong>
+                    </div>
+
+                    <!-- ESTADO DE PAGOS SI NO ES PROFORMA -->
+                    @if (!factura.EsProforma)
+                    {
+                        <div class="fila-liquidacion" style="padding-top: 3px;">
+                            <span class="text-success fw-semibold">Monto Pagado / Abonado:</span>
+                            <span class="font-monospace text-success fw-bold">@factura.Moneda @factura.MontoPagado.ToString("N2")</span>
+                        </div>
+                        <div class="fila-liquidacion">
+                            <span class="@(factura.SaldoPendiente == 0 ? "text-success fw-bold" : "text-danger fw-bold")">
+                                Saldo Pendiente de Cobro:
+                            </span>
+                            <strong class="font-monospace @(factura.SaldoPendiente == 0 ? "text-success" : "text-danger")">
+                                @factura.Moneda @factura.SaldoPendiente.ToString("N2")
+                            </strong>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+/* ========================================================================= */
+/* ESTILOS DE PANTALLA PARA EL COMPROBANTE TAMAÑO CARTA                      */
+/* ========================================================================= */
+.documento-fiscal-carta {
+    width: 100%;
+    max-width: 215mm;
+    margin: 0 auto;
+    background: #fff;
+    padding: 0;
+    font-size: 8.5pt;
+    line-height: 1.25;
+    color: #111;
+}
+
+.encabezado-fiscal {
+    border: 1.5px solid #0d6efd;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background-color: #f8fafd;
+}
+
+.cuadro-cai {
+    border: 1.5px solid #0d6efd;
+    border-radius: 4px;
+    padding: 8px;
+    background: #fff;
+    text-align: right;
+}
+
+.badge-tipo-doc {
+    display: inline-block;
+    color: #fff;
+    font-size: 8.5pt;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.caja-datos-receptor {
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    background: #fff;
+}
+
+.tabla-sar {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 8px;
+}
+
+.tabla-sar th {
+    background-color: #e9ecef !important;
+    color: #212529;
+    border: 1px solid #adb5bd !important;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    padding: 4px 6px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.tabla-sar td {
+    border: 1px solid #ced4da !important;
+    padding: 4px 6px;
+    font-size: 8pt;
+    vertical-align: middle;
+}
+
+.resumen-inferior {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 10px;
+    align-items: start;
+}
+
+.caja-letras {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+}
+
+.caja-leyenda-sar {
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 6px 10px;
+    background: #fff;
+    font-size: 7pt;
+    color: #495057;
+    margin-bottom: 6px;
+}
+
+.caja-p360 {
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 7.5pt;
+}
+
+.p360-solvente {
+    border: 1px solid #198754;
+    background-color: #e8f5e9;
+    color: #0f5132;
+}
+
+.p360-bloqueado {
+    border: 1px solid #dc3545;
+    background-color: #fdf2f2;
+    color: #842029;
+}
+
+.cuadro-liquidacion {
+    border: 1.5px solid #0d6efd;
+    border-radius: 4px;
+    padding: 6px 10px;
+    background: #fff;
+}
+
+.fila-liquidacion {
+    display: flex;
+    justify-content: space-between;
+    padding: 2.5px 0;
+    border-bottom: 1px dashed #dee2e6;
+    font-size: 8pt;
+}
+
+.fila-liquidacion:last-child {
+    border-bottom: none;
+}
+
+.fila-destacada {
+    background-color: #e7f1ff;
+    padding: 3px 6px;
+    margin: 2px -6px;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+.fila-total {
+    background-color: #cfe2ff;
+    padding: 4px 6px;
+    margin: 3px -6px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 9pt;
+    color: #084298;
+}
+
+/* ========================================================================= */
+/* IMPRESIÓN REGLAMENTARIA SAR - TAMAÑO CARTA (US LETTER)                    */
+/* ========================================================================= */
+@@page {
+    size: letter portrait;
+    margin: 8mm 10mm 8mm 10mm;
+}
+
+@@media print {
+    *, *::before, *::after {
+        box-shadow: none !important;
+        text-shadow: none !important;
+    }
+
+    html, body {
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-family: Arial, Helvetica, sans-serif !important;
+        font-size: 8.5pt !important;
+        line-height: 1.25 !important;
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+
+    .documento-fiscal-carta {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    table, .tabla-sar {
+        border-collapse: collapse !important;
+        width: 100% !important;
+        page-break-inside: auto !important;
+    }
+
+    tr {
+        page-break-inside: avoid !important;
+        page-break-after: auto !important;
+    }
+
+    thead {
+        display: table-header-group !important;
+    }
+
+    th, td {
+        border: 1px solid #adb5bd !important;
+        padding: 4px 6px !important;
+        font-size: 8pt !important;
+    }
+
+    .resumen-inferior {
+        display: grid !important;
+        grid-template-columns: 1.15fr 0.85fr !important;
+        gap: 10px !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    .caja-p360, .cuadro-liquidacion, .caja-letras, .caja-leyenda-sar {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+}
+</style>
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    [SupplyParameterFromQuery]
+    public bool? AutoPrint { get; set; }
+
+    private bool cargando = true;
+    private FacturaCobro? factura;
+
+    private string rtnEmisor = "08011990123456";
+    private string nombreEmisor = "LegalTech Honduras S. de R.L.";
+    private string direccionEmisor = "Edificio Corporativo Centro Morazán, Torre 1, Piso 7, Boulevard Morazán, Tegucigalpa, M.D.C., Francisco Morazán, Honduras";
+    private string telefonoEmisor = "+504 2239-0000 / +504 9988-7766";
+    private string correoEmisor = "facturacion@legaltech.hn";
+    private string caiAutorizado = "A84F2B-98CE21-1B4480-1498B2-FA8321-44";
+    private string rangoAutorizado = "001-001-01-00000001 al 001-001-01-00050000";
+    private string fechaLimiteEmision = "31/12/2027";
+    private decimal tasaISVActual = 0.15m;
+
+    protected override async Task OnInitializedAsync()
+    {
+        cargando = true;
+        factura = await FacturacionService.GetFacturaByIdAsync(Id);
+
+        tasaISVActual = await FacturacionService.GetParametroDecimalAsync("ISV_PORCENTAJE", 15.00m) / 100m;
+        rtnEmisor = await FacturacionService.GetParametroStringAsync("RTN_EMISOR", "08011990123456");
+        nombreEmisor = await FacturacionService.GetParametroStringAsync("NOMBRE_EMISOR", "LegalTech Honduras S. de R.L.");
+        direccionEmisor = await FacturacionService.GetParametroStringAsync("DIRECCION_EMISOR", "Edificio Corporativo Centro Morazán, Torre 1, Piso 7, Boulevard Morazán, Tegucigalpa, M.D.C., Francisco Morazán, Honduras");
+        telefonoEmisor = await FacturacionService.GetParametroStringAsync("TELEFONO_EMISOR", "+504 2239-0000 / +504 9988-7766");
+        correoEmisor = await FacturacionService.GetParametroStringAsync("CORREO_EMISOR", "facturacion@legaltech.hn");
+        caiAutorizado = await FacturacionService.GetParametroStringAsync("CAI_SAR_AUTORIZADO", "A84F2B-98CE21-1B4480-1498B2-FA8321-44");
+        rangoAutorizado = await FacturacionService.GetParametroStringAsync("RANGO_AUTORIZADO_SAR", "001-001-01-00000001 al 001-001-01-00050000");
+        fechaLimiteEmision = await FacturacionService.GetParametroStringAsync("FECHA_LIMITE_SAR", "31/12/2027");
+
+        cargando = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && AutoPrint == true && factura != null)
+        {
+            await Task.Delay(300);
+            await JSRuntime.InvokeVoidAsync("window.print");
+        }
+    }
+
+    private async Task Imprimir()
+    {
+        await JSRuntime.InvokeVoidAsync("window.print");
+    }
+
+    private string ObtenerTextoEstado(EstadoFactura estado)
+    {
+        return estado switch
+        {
+            EstadoFactura.Borrador => "Borrador (Proforma)",
+            EstadoFactura.PendienteAprobacion => "Pend. Aprobación",
+            EstadoFactura.Emitida => "Emitida SAR",
+            EstadoFactura.Parcial => "Pago Parcial",
+            EstadoFactura.Pagada => "Pagada",
+            EstadoFactura.Rechazada => "Devuelta",
+            EstadoFactura.Anulada => "Anulada",
+            _ => estado.ToString()
+        };
+    }
+
+    private string ObtenerBadgeClaseEstado(EstadoFactura estado)
+    {
+        return estado switch
+        {
+            EstadoFactura.Borrador => "bg-secondary text-white",
+            EstadoFactura.PendienteAprobacion => "bg-warning text-dark",
+            EstadoFactura.Emitida => "bg-danger text-white",
+            EstadoFactura.Parcial => "bg-primary text-white",
+            EstadoFactura.Pagada => "bg-success text-white",
+            EstadoFactura.Rechazada => "bg-danger bg-opacity-75 text-white",
+            EstadoFactura.Anulada => "bg-dark text-white",
+            _ => "bg-secondary text-white"
+        };
+    }
+}

@@ -1,0 +1,2059 @@
+@page "/facturacion"
+@rendermode InteractiveServer
+@using LegalTech.Web.Domain.Entities
+@using LegalTech.Web.Domain.Enums
+@using LegalTech.Web.Services
+@inject FacturacionService FacturacionService
+@inject ClienteService ClienteService
+@inject ExpedienteService ExpedienteService
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Facturación, Aranceles y Solvencia P360 - LegalTech Honduras</PageTitle>
+
+<div class="w-100 p-2 p-md-3 pantalla-facturacion no-print">
+    <!-- 1. ENCABEZADO PRINCIPAL -->
+    <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <RadzenText TextStyle="TextStyle.H5" TagName="TagName.H1" Class="m-0 text-primary fw-bold">
+                    <RadzenIcon Icon="receipt_long" Class="me-1 text-success" /> Facturación, Aranceles y Solvencia P360
+                </RadzenText>
+                <span class="badge bg-success text-white px-2 py-1">Finanzas de PI</span>
+            </div>
+            <RadzenText TextStyle="TextStyle.Caption" Class="text-muted m-0">
+                Separación contable de gastos oficiales exentos vs. honorarios gravados (ISV 15%) y control infranqueable de solvencia (Párrafo 360 del Manual)
+            </RadzenText>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <RadzenButton Icon="add_circle" Text="Nueva Factura / Proforma" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Medium" 
+                          Click="@AbrirModalNuevaFactura" Class="shadow-sm fw-bold" />
+            <RadzenButton Icon="price_change" Text="Tarifas y Aranceles" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Medium" 
+                          Click="@(() => NavigationManager.NavigateTo("/configuraciones"))" Class="shadow-sm" />
+            <RadzenButton Icon="dashboard" Text="Torre de Control" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Medium" 
+                          Click="@(() => NavigationManager.NavigateTo("/"))" Class="shadow-sm" />
+        </div>
+    </div>
+
+    <!-- 2. FRANJA EJECUTIVA DE INDICADORES CLAVE (FINANZAS Y P360) -->
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-5 g-2 mb-3">
+        <!-- 1. FACTURACIÓN EMITIDA -->
+        <div class="col">
+            <RadzenCard Class="p-3 bg-white shadow-sm border-0 h-100 d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="text-muted small d-block">Facturas Emitidas (SAR)</span>
+                    <strong class="fs-5 text-dark">L. @totalFacturadoHNL.ToString("N2")</strong>
+                    <span class="text-muted small d-block">@facturas.Count(f => !f.EsProforma && f.Estado != EstadoFactura.Anulada) timbradas</span>
+                </div>
+                <RadzenIcon Icon="receipt_long" Class="text-primary fs-2" />
+            </RadzenCard>
+        </div>
+
+        <!-- 2. TOTAL COBRADO -->
+        <div class="col">
+            <RadzenCard Class="p-3 bg-white shadow-sm border-0 h-100 d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="text-success small d-block fw-semibold">🟢 Total Cobrado</span>
+                    <strong class="fs-5 text-success">L. @totalCobradoHNL.ToString("N2")</strong>
+                    <span class="text-muted small d-block">@facturas.Count(f => f.Estado == EstadoFactura.Pagada) saldadas</span>
+                </div>
+                <RadzenIcon Icon="check_circle" Class="text-success fs-2" />
+            </RadzenCard>
+        </div>
+
+        <!-- 3. CUENTAS POR COBRAR -->
+        <div class="col">
+            <RadzenCard Class="p-3 bg-white shadow-sm border-0 h-100 d-flex align-items-center justify-content-between border-start border-4 border-danger">
+                <div>
+                    <span class="text-danger small d-block fw-semibold">🔴 Por Cobrar (Saldo)</span>
+                    <strong class="fs-5 text-danger">L. @totalSaldoPendienteHNL.ToString("N2")</strong>
+                    <span class="text-muted small d-block">@totalFacturasConSaldo con saldo</span>
+                </div>
+                <RadzenIcon Icon="pending_actions" Class="text-danger fs-2" />
+            </RadzenCard>
+        </div>
+
+        <!-- 4. PROFORMAS Y BORRADORES -->
+        <div class="col">
+            <RadzenCard Class="p-3 bg-white shadow-sm border-0 h-100 d-flex align-items-center justify-content-between border-start border-4 border-warning">
+                <div>
+                    <span class="text-warning-emphasis small d-block fw-semibold">📝 Proformas / Borrador</span>
+                    <strong class="fs-5 text-dark">L. @totalProformasHNL.ToString("N2")</strong>
+                    <span class="text-muted small d-block">@totalProformasCount en revisión/borrador</span>
+                </div>
+                <RadzenIcon Icon="edit_note" Class="text-warning fs-2" />
+            </RadzenCard>
+        </div>
+
+        <!-- 5. SOLVENCIA P360 -->
+        <div class="col">
+            <RadzenCard Class="p-3 bg-white shadow-sm border-0 h-100 d-flex align-items-center justify-content-between border-start border-4 border-info">
+                <div>
+                    <span class="text-info small d-block fw-semibold">🛡️ Solvencia P360</span>
+                    <strong class="fs-5 text-info">@expedientesSolventes P360</strong>
+                    <span class="text-muted small d-block">Títulos autorizados</span>
+                </div>
+                <RadzenIcon Icon="verified" Class="text-info fs-2" />
+            </RadzenCard>
+        </div>
+    </div>
+
+    @if (ExpedienteId.HasValue && expedienteFiltro != null)
+    {
+        <div class="alert alert-info d-flex align-items-center justify-content-between p-2 mb-3 shadow-sm border border-info">
+            <div class="d-flex align-items-center gap-2">
+                <RadzenIcon Icon="filter_list" Class="text-primary fs-4" />
+                <div>
+                    <strong>Filtrado por Expediente:</strong> <span class="fw-bold text-primary">@expedienteFiltro.CodigoInterno</span> - @expedienteFiltro.DenominacionMarca (Clase @expedienteFiltro.ClaseNiza)
+                    <span class="text-muted ms-2 small">Titular: @expedienteFiltro.Cliente?.NombreRazonSocial</span>
+                </div>
+            </div>
+            <RadzenButton Icon="close" Text="Quitar Filtro" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                          Click="@QuitarFiltroExpediente" />
+        </div>
+    }
+
+    <!-- 3. FILTROS Y BÚSQUEDA AVANZADA -->
+    <RadzenCard Class="p-3 mb-3 bg-white shadow-sm border-0">
+        <RadzenRow Gap="1rem" AlignItems="AlignItems.Center">
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenFormField Text="Buscar por número, CAI, cliente o expediente" Class="w-100">
+                    <RadzenTextBox @bind-Value="textoBusqueda" @oninput="@((ChangeEventArgs e) => { textoBusqueda = e.Value?.ToString() ?? ""; FiltrarFacturas(); })" 
+                                   Placeholder="Ej: FAC-2026, Textiles, Café, 0501..." Class="w-100" />
+                </RadzenFormField>
+            </RadzenColumn>
+
+            <RadzenColumn Size="12" SizeSM="4" SizeMD="3">
+                <RadzenFormField Text="Estado de Cobro" Class="w-100">
+                    <RadzenDropDown @bind-Value="filtroEstado" Data="@opcionesEstados" TextProperty="Nombre" ValueProperty="Valor" Change="@FiltrarFacturas" Class="w-100" />
+                </RadzenFormField>
+            </RadzenColumn>
+
+            <RadzenColumn Size="12" SizeSM="4" SizeMD="2">
+                <RadzenFormField Text="Moneda" Class="w-100">
+                    <RadzenDropDown @bind-Value="filtroMoneda" Data="@opcionesMonedas" Change="@FiltrarFacturas" Class="w-100" />
+                </RadzenFormField>
+            </RadzenColumn>
+
+            <RadzenColumn Size="12" SizeSM="4" SizeMD="3">
+                <RadzenFormField Text="Hito Procesal" Class="w-100">
+                    <RadzenDropDown @bind-Value="filtroHito" Data="@opcionesHitos" Change="@FiltrarFacturas" Class="w-100" />
+                </RadzenFormField>
+            </RadzenColumn>
+        </RadzenRow>
+    </RadzenCard>
+
+    <!-- 4. TABLA MAESTRA DE FACTURACIÓN Y COBRANZAS -->
+    <RadzenCard Class="p-2 p-md-3 shadow-sm border-0 bg-white">
+        @if (cargando)
+        {
+            <div class="p-4 text-center">
+                <RadzenProgressBar Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" Class="mb-2" />
+                <span class="text-muted small">Cargando facturación, aranceles y evaluando compuertas P360...</span>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive w-100" style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+                <RadzenDataGrid Data="@facturasFiltradas" TItem="FacturaCobro" AllowPaging="true" PageSize="10" 
+                                AllowSorting="true" EmptyText="No se encontraron comprobantes o facturas con los filtros seleccionados." 
+                                Class="w-100 table-sm" Style="min-width: 1100px;">
+                    <Columns>
+                        <!-- 1. COMPROBANTE / CAI -->
+                        <RadzenDataGridColumn TItem="FacturaCobro" Title="No. Documento / CAI" Width="190px">
+                            <Template Context="f">
+                                <div>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <strong class="@(f.EsProforma ? "text-secondary font-monospace" : "text-dark font-monospace")">@f.NumeroFactura</strong>
+                                        @if (f.EsProforma)
+                                        {
+                                            <span class="badge bg-warning text-dark py-0 px-1" style="font-size: 0.65rem;">PROFORMA</span>
+                                        }
+                                    </div>
+                                    <span class="text-muted" style="font-size: 0.72rem;">Fecha: @f.FechaEmision.ToString("dd/MM/yyyy")</span>
+                                    @if (!string.IsNullOrEmpty(f.NumeroCAI))
+                                    {
+                                        <span class="badge bg-light text-muted border d-block text-truncate mt-1" style="font-size: 0.65rem;" title="@f.NumeroCAI">
+                                            CAI: @f.NumeroCAI
+                                        </span>
+                                    }
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 2. CLIENTE / TITULAR -->
+                        <RadzenDataGridColumn TItem="FacturaCobro" Title="Titular / Cliente" Width="220px">
+                            <Template Context="f">
+                                <div>
+                                    <strong class="text-dark d-block">@f.Cliente.NombreRazonSocial</strong>
+                                    <span class="text-muted small font-monospace">RTN: @f.Cliente.NumeroIdentificacionRTN</span>
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 3. EXPEDIENTE & SIGNO -->
+                        <RadzenDataGridColumn TItem="FacturaCobro" Title="Expediente / Signo" Width="200px">
+                            <Template Context="f">
+                                @if (f.Expediente != null)
+                                {
+                                    <div>
+                                        <strong class="text-dark d-block">@f.Expediente.DenominacionMarca</strong>
+                                        <a href="/expedientes/@f.ExpedienteId" class="badge bg-primary bg-opacity-10 text-primary border border-primary text-decoration-none">
+                                            @f.Expediente.CodigoInterno (Clase @f.Expediente.ClaseNiza) <RadzenIcon Icon="open_in_new" Style="font-size: 0.75rem;" />
+                                        </a>
+                                        @if (!string.IsNullOrEmpty(f.HitoProcesal))
+                                        {
+                                            <span class="text-muted d-block small">Hito: @f.HitoProcesal</span>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-light text-muted border">Facturación General</span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 4. DESGLOSE CONTABLE (HONORARIOS VS GASTOS OFICIALES) -->
+                        <RadzenDataGridColumn TItem="FacturaCobro" Title="Desglose Contable" Width="210px">
+                            <Template Context="f">
+                                <div class="small">
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Honorarios (Gravado):</span>
+                                        <strong>@f.Moneda @f.SubtotalHonorarios.ToString("N2")</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Gastos Oficiales (Exento):</span>
+                                        <strong>@f.Moneda @f.SubtotalGastosOficiales.ToString("N2")</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">ISV (15%):</span>
+                                        <span class="text-secondary">@f.Moneda @f.MontoISV.ToString("N2")</span>
+                                    </div>
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 5. TOTAL Y SALDO PENDIENTE -->
+                        <RadzenDataGridColumn TItem="FacturaCobro" Title="Total / Saldo" Width="170px">
+                            <Template Context="f">
+                                <div>
+                                    <strong class="fs-6 text-dark d-block">@f.Moneda @f.TotalFactura.ToString("N2")</strong>
+                                    @if (f.SaldoPendiente == 0)
+                                    {
+                                        <span class="badge bg-success text-white">
+                                            <RadzenIcon Icon="task_alt" Class="me-1" Style="font-size: 0.75rem;" /> Saldo L. 0.00
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <div class="small">
+                                            <span class="@(f.EsProforma ? "text-secondary fw-bold" : "text-danger fw-bold")">
+                                                @(f.EsProforma ? "Por Facturar: " : "Saldo: ") @f.Moneda @f.SaldoPendiente.ToString("N2")
+                                            </span>
+                                            @if (!f.EsProforma)
+                                            {
+                                                <span class="text-muted d-block" style="font-size: 0.72rem;">Pagado: @f.Moneda @f.MontoPagado.ToString("N2")</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 6. ESTADO Y SOLVENCIA P360 -->
+                        <RadzenDataGridColumn TItem="FacturaCobro" Title="Estado / Regla P360" Width="190px" TextAlign="TextAlign.Center">
+                            <Template Context="f">
+                                <div class="d-flex flex-column align-items-center gap-1">
+                                    <span class="badge @ObtenerBadgeClaseEstado(f.Estado)">
+                                        @ObtenerTextoEstado(f.Estado)
+                                    </span>
+                                    @if (!string.IsNullOrEmpty(f.SolicitadoPor) && f.EsProforma)
+                                    {
+                                        <span class="text-muted" style="font-size: 0.68rem;" title="Elaborado por">Por: @f.SolicitadoPor</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(f.AprobadoPor) && !f.EsProforma)
+                                    {
+                                        <span class="text-success" style="font-size: 0.68rem;" title="Aprobado y Timbrado por">Aprobó: @f.AprobadoPor</span>
+                                    }
+                                    @if (f.Expediente != null)
+                                    {
+                                        @if (f.EsProforma)
+                                        {
+                                            <span class="badge bg-light text-muted border" style="font-size: 0.68rem;" title="Las proformas no generan pasivo exigible para P360">
+                                                ⚪ Sin Bloqueo P360
+                                            </span>
+                                        }
+                                        else if (f.SaldoPendiente == 0)
+                                        {
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size: 0.68rem;" title="Solvencia acreditada para retiro del certificado original">
+                                                🛡️ Solvencia P360 OK
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger" style="font-size: 0.68rem;" title="Bloqueado por deuda: prohibido entregar certificado original">
+                                                ⛔ Bloqueado P360
+                                            </span>
+                                        }
+                                    }
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+
+                        <!-- 7. ACCIONES Y FLUJO DE APROBACIÓN -->
+                        <RadzenDataGridColumn TItem="FacturaCobro" Title="Acciones / Flujo" Width="230px" TextAlign="TextAlign.Center">
+                            <Template Context="f">
+                                <div class="d-flex justify-content-center flex-wrap gap-1">
+                                    <RadzenButton Icon="print" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                                                  Text="Imprimir" Click="@(() => ImprimirFacturaDirecta(f))" title="Imprimir Factura Fiscal SAR o Proforma" />
+
+                                    @if (f.Estado == EstadoFactura.Borrador)
+                                    {
+                                        <RadzenButton Icon="send" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
+                                                      Text="A Revisión" Click="@(() => EnviarFacturaAAprobacion(f))" title="Enviar a Revisión de Socio" />
+                                        <RadzenButton Icon="check_circle" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
+                                                      Text="Emitir" Click="@(() => AprobarFacturaDirecta(f))" title="Aprobar y Emitir Factura Oficial SAR" />
+                                        <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                                                      Click="@(() => VerDetalleFactura(f))" title="Ver Proforma" />
+                                        <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.ExtraSmall" 
+                                                      Click="@(() => EliminarBorrador(f))" title="Descartar Borrador" />
+                                    }
+                                    else if (f.Estado == EstadoFactura.PendienteAprobacion)
+                                    {
+                                        <RadzenButton Icon="check_circle" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
+                                                      Text="Aprobar SAR" Click="@(() => AprobarFacturaDirecta(f))" title="Aprobar y Emitir Factura Fiscal SAR" />
+                                        <RadzenButton Icon="undo" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
+                                                      Text="Devolver" Click="@(() => AbrirModalDevolver(f))" title="Devolver a Borrador para Correcciones" />
+                                        <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                                                      Click="@(() => VerDetalleFactura(f))" title="Revisar Proforma" />
+                                    }
+                                    else if (f.Estado == EstadoFactura.Emitida || f.Estado == EstadoFactura.Parcial)
+                                    {
+                                        <RadzenButton Icon="payments" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
+                                                      Text="Cobrar" Click="@(() => AbrirModalCobro(f))" title="Registrar Cobro / Abono" />
+                                        <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
+                                                      Click="@(() => VerDetalleFactura(f))" title="Ver Comprobante Oficial" />
+                                        @if (f.MontoPagado == 0)
+                                        {
+                                            <RadzenButton Icon="cancel" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.ExtraSmall" 
+                                                          Click="@(() => ConfirmarAnular(f))" title="Anular Factura" />
+                                        }
+                                    }
+                                    else if (f.Estado == EstadoFactura.Pagada)
+                                    {
+                                        <RadzenButton Icon="verified" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.ExtraSmall" 
+                                                      Text="P360 Recibo" Click="@(() => VerDetalleFactura(f))" title="Ver Comprobante Oficial P360" />
+                                    }
+                                    else if (f.Estado == EstadoFactura.Rechazada)
+                                    {
+                                        <RadzenButton Icon="refresh" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.ExtraSmall" 
+                                                      Text="Reactivar" Click="@(() => ReactivarBorrador(f))" title="Reactivar como Borrador" />
+                                        <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                                                      Click="@(() => VerDetalleFactura(f))" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                                                      Click="@(() => VerDetalleFactura(f))" />
+                                    }
+                                </div>
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </div>
+        }
+    </RadzenCard>
+</div>
+
+<!-- ========================================================================= -->
+<!-- MODAL: REGISTRAR COBRO / PAGO DE FACTURA                                 -->
+<!-- ========================================================================= -->
+@if (mostrarModalCobro && facturaCobroSeleccionada != null)
+{
+    <div class="modal fade show d-block no-print" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header bg-success text-white border-bottom">
+                    <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
+                        <RadzenIcon Icon="payments" /> Registrar Cobro / Liquidación de Factura
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="@(() => mostrarModalCobro = false)"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <div class="p-3 mb-3 rounded bg-light border">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">No. Factura:</span>
+                            <strong class="font-monospace text-dark">@facturaCobroSeleccionada.NumeroFactura</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Cliente:</span>
+                            <strong class="text-dark">@facturaCobroSeleccionada.Cliente.NombreRazonSocial</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Total Facturado:</span>
+                            <span>@facturaCobroSeleccionada.Moneda @facturaCobroSeleccionada.TotalFactura.ToString("N2")</span>
+                        </div>
+                        <div class="d-flex justify-content-between border-top pt-1">
+                            <span class="fw-bold text-danger">Saldo Pendiente Actual:</span>
+                            <strong class="fs-5 text-danger">@facturaCobroSeleccionada.Moneda @facturaCobroSeleccionada.SaldoPendiente.ToString("N2")</strong>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <RadzenFormField Text="Monto a Cobrar / Abonar" Class="w-100">
+                            <RadzenNumeric @bind-Value="montoPagoIngresado" Min="0.01m" Max="@facturaCobroSeleccionada.SaldoPendiente" Class="w-100" />
+                        </RadzenFormField>
+                        <div class="d-flex justify-content-end mt-1">
+                            <button type="button" class="btn btn-link btn-sm text-decoration-none p-0" @onclick="@(() => montoPagoIngresado = facturaCobroSeleccionada.SaldoPendiente)">
+                                Liquidar Saldo Total (@facturaCobroSeleccionada.Moneda @facturaCobroSeleccionada.SaldoPendiente.ToString("N2"))
+                            </button>
+                        </div>
+                    </div>
+
+                    <RadzenFormField Text="Método de Pago" Class="w-100 mb-3">
+                        <RadzenDropDown @bind-Value="metodoPagoIngresado" Data="@metodosPagoDisponibles" Class="w-100" />
+                    </RadzenFormField>
+
+                    <RadzenFormField Text="Referencia Bancaria / No. de Depósito o Cheque" Class="w-100 mb-3">
+                        <RadzenTextBox @bind-Value="referenciaPagoIngresada" Placeholder="Ej: BAC-DEP-994821, CHK-8819..." Class="w-100" />
+                    </RadzenFormField>
+
+                    <!-- AVISO DE IMPACTO EN REGLA P360 -->
+                    <div class="p-2 rounded bg-light border-start border-3 border-info">
+                        <div class="d-flex align-items-start gap-2">
+                            <RadzenIcon Icon="verified" Class="text-info fs-5 mt-1" />
+                            <small class="text-muted">
+                                <strong>Regla Infranqueable de Negocio (P360):</strong>
+                                Si este pago liquida el 100% del saldo pendiente del expediente, el sistema acreditará automáticamente la <b>Solvencia P360</b>, habilitando la entrega física del certificado original en bóveda.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <RadzenButton Text="Registrar Cobro" Icon="check" ButtonStyle="ButtonStyle.Success" Click="@EjecutarRegistroCobro" Class="fw-bold" />
+                    <RadzenButton Text="Cancelar" ButtonStyle="ButtonStyle.Light" Click="@(() => mostrarModalCobro = false)" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ========================================================================= -->
+<!-- MODAL: CREAR NUEVA FACTURA / PROFORMA                                    -->
+<!-- ========================================================================= -->
+@if (mostrarModalNuevaFactura)
+{
+    <div class="modal fade show d-block no-print" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header @(tipoEmisionSeleccionada == EstadoFactura.Emitida ? "bg-primary text-white" : "bg-warning text-dark") border-bottom">
+                    <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
+                        <RadzenIcon Icon="@(tipoEmisionSeleccionada == EstadoFactura.Emitida ? "receipt" : "edit_note")" /> 
+                        @(tipoEmisionSeleccionada == EstadoFactura.Emitida ? "Emitir Factura Fiscal Oficial (SAR)" : "Elaborar Proforma / Presupuesto en Borrador")
+                    </h5>
+                    <button type="button" class="btn-close @(tipoEmisionSeleccionada == EstadoFactura.Emitida ? "btn-close-white" : "")" @onclick="@(() => mostrarModalNuevaFactura = false)"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <RadzenRow Gap="1rem" Class="mb-3">
+                        <RadzenColumn Size="12" SizeMD="6">
+                            <RadzenFormField Text="Cliente / Titular" Class="w-100">
+                                <RadzenDropDown @bind-Value="nuevaFactura.ClienteId" Data="@clientes" TextProperty="NombreRazonSocial" ValueProperty="Id" 
+                                                AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Class="w-100" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+
+                        <RadzenColumn Size="12" SizeMD="6">
+                            <RadzenFormField Text="Expediente Marcario (Opcional)" Class="w-100">
+                                <RadzenDropDown @bind-Value="nuevaFactura.ExpedienteId" Data="@expedientes" TextProperty="DenominacionMarca" ValueProperty="Id" 
+                                                AllowClear="true" Placeholder="-- Seleccionar Expediente --" Change="@AlSeleccionarExpedienteEnFactura" Class="w-100">
+                                    <Template Context="e">
+                                        <span>@e.CodigoInterno - @e.DenominacionMarca (Clase @e.ClaseNiza)</span>
+                                    </Template>
+                                </RadzenDropDown>
+                            </RadzenFormField>
+                        </RadzenColumn>
+
+                        <RadzenColumn Size="12" SizeMD="3">
+                            <RadzenFormField Text="Tipo de Emisión" Class="w-100">
+                                <RadzenDropDown @bind-Value="tipoEmisionSeleccionada" Data="@opcionesTiposEmision" TextProperty="Nombre" ValueProperty="Valor" 
+                                                Change="@AlCambiarTipoEmision" Class="w-100" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+
+                        <RadzenColumn Size="12" SizeMD="3">
+                            <RadzenFormField Text="@(tipoEmisionSeleccionada == EstadoFactura.Emitida ? "No. Factura SAR" : "No. Proforma")" Class="w-100">
+                                <RadzenTextBox @bind-Value="nuevaFactura.NumeroFactura" Class="w-100 font-monospace" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+
+                        <RadzenColumn Size="12" SizeMD="3">
+                            <RadzenFormField Text="Moneda de Facturación" Class="w-100">
+                                <RadzenDropDown @bind-Value="nuevaFactura.Moneda" Data="@opcionesMonedasDisponibles" Change="@RecalcularTotalesNuevaFactura" Class="w-100" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+
+                        <RadzenColumn Size="12" SizeMD="3">
+                            <RadzenFormField Text="Hito Procesal" Class="w-100">
+                                <RadzenDropDown @bind-Value="nuevaFactura.HitoProcesal" Data="@opcionesHitosDisponibles" Class="w-100" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+                    </RadzenRow>
+
+                    <!-- AVISO DE FLUJO SEGÚN TIPO -->
+                    @if (tipoEmisionSeleccionada == EstadoFactura.Borrador)
+                    {
+                        <div class="alert alert-light border border-secondary border-opacity-25 small text-muted py-2 mb-3 d-flex align-items-center gap-2">
+                            <RadzenIcon Icon="info" Class="text-secondary" />
+                            <div>
+                                <strong>Modo Proforma (Borrador):</strong> No asigna CAI, no genera pasivo tributario exigible ante el SAR y <b>no bloquea la solvencia P360</b>. Puede revisarse y ajustarse libremente.
+                            </div>
+                        </div>
+                    }
+                    else if (tipoEmisionSeleccionada == EstadoFactura.PendienteAprobacion)
+                    {
+                        <div class="alert alert-warning border border-warning small py-2 mb-3 d-flex align-items-center gap-2">
+                            <RadzenIcon Icon="hourglass_top" Class="text-warning" />
+                            <div>
+                                <strong>Pendiente de Aprobación:</strong> La proforma quedará en cola para que un socio director la apruebe y autorice el timbrado fiscal oficial.
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-primary border border-primary small py-2 mb-3 d-flex align-items-center gap-2">
+                            <RadzenIcon Icon="verified" Class="text-primary" />
+                            <div>
+                                <strong>Emisión Inmediata SAR:</strong> Se asignará correlativo fiscal, CAI autorizado y se activará la compuerta P360 si mantiene saldo pendiente.
+                            </div>
+                        </div>
+                    }
+
+                    <!-- AGREGAR SERVICIOS DESDE EL TARIFARIO ARANCELARIO -->
+                    <div class="card p-3 bg-light border mb-3">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <strong class="text-dark small d-flex align-items-center gap-1">
+                                <RadzenIcon Icon="price_change" Class="text-primary" /> Agregar Servicio desde Tarifario Arancelario
+                            </strong>
+                            <div class="d-flex gap-2">
+                                <RadzenButton Icon="playlist_add" Text="+ Concepto Manual" ButtonStyle="ButtonStyle.Secondary" Size="ButtonSize.ExtraSmall" 
+                                              Click="@AgregarLineaManual" title="Agregar concepto libre o personalizado" />
+                                <RadzenButton Icon="add" Text="Agregar a Factura" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.ExtraSmall" 
+                                              Click="@AgregarTarifaAFactura" />
+                            </div>
+                        </div>
+                        <RadzenDropDown @bind-Value="tarifaSeleccionadaId" Data="@tarifasDisponibles" 
+                                        TextProperty="Concepto" ValueProperty="Id" 
+                                        Placeholder="-- Seleccione una tarifa de honorarios configurada --" 
+                                        AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Class="w-100">
+                            <Template Context="t">
+                                <div class="d-flex justify-content-between">
+                                    <span><b>[@t.EtapaProcesal]</b> @t.Concepto</span>
+                                    <span class="text-primary font-monospace">HNL @t.HonorariosHNL.ToString("N2") + Gastos L. @t.GastosOficialesHNL.ToString("N2")</span>
+                                </div>
+                            </Template>
+                        </RadzenDropDown>
+                    </div>
+
+                    <!-- LÍNEAS DE LA FACTURA -->
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead class="table-secondary small">
+                                <tr>
+                                    <th>Concepto</th>
+                                    <th style="width: 110px;">Tipo</th>
+                                    <th style="width: 70px;">Cant.</th>
+                                    <th style="width: 120px;">Precio Unit.</th>
+                                    <th style="width: 100px;">ISV (15%)</th>
+                                    <th style="width: 120px;">Total</th>
+                                    <th style="width: 50px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!nuevaFactura.Detalles.Any())
+                                {
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted p-3">No hay líneas en la factura. Seleccione una tarifa arriba o agregue un concepto.</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var d in nuevaFactura.Detalles)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <input type="text" class="form-control form-control-sm" @bind="d.Concepto" />
+                                            </td>
+                                            <td>
+                                                <button type="button" class="btn btn-sm @(d.EsGastoOficial ? "btn-outline-secondary" : "btn-outline-primary") d-flex align-items-center gap-1 py-0 px-2" 
+                                                        @onclick="@(() => AlternarTipoLinea(d))" title="Clic para alternar entre Honorarios (ISV 15%) y Gasto Oficial (0% Exento)">
+                                                    <RadzenIcon Icon="@(d.EsGastoOficial ? "account_balance" : "work")" Style="font-size: 0.8rem;" />
+                                                    <small class="fw-semibold">@(d.EsGastoOficial ? "Gasto Oficial (Exento)" : "Honorarios (ISV)")</small>
+                                                </button>
+                                            </td>
+                                            <td>
+                                                <input type="number" class="form-control form-control-sm" @bind="d.Cantidad" @bind:after="RecalcularTotalesNuevaFactura" min="1" />
+                                            </td>
+                                            <td>
+                                                <input type="number" step="0.01" class="form-control form-control-sm" @bind="d.PrecioUnitario" @bind:after="RecalcularTotalesNuevaFactura" />
+                                            </td>
+                                            <td class="text-end small">
+                                                @nuevaFactura.Moneda @d.MontoISV.ToString("N2")
+                                            </td>
+                                            <td class="text-end fw-bold small">
+                                                @nuevaFactura.Moneda @d.TotalLinea.ToString("N2")
+                                            </td>
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-outline-danger btn-sm p-1" @onclick="@(() => EliminarLineaFactura(d))">
+                                                    <RadzenIcon Icon="delete" Style="font-size: 0.9rem;" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- RESUMEN DE TOTALES -->
+                    <div class="row justify-content-end">
+                        <div class="col-md-6">
+                            <div class="p-3 bg-light rounded border">
+                                <div class="d-flex justify-content-between mb-1 small">
+                                    <span class="text-muted">Subtotal Honorarios (Gravado):</span>
+                                    <strong>@nuevaFactura.Moneda @nuevaFactura.SubtotalHonorarios.ToString("N2")</strong>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1 small">
+                                    <span class="text-muted">Gastos Oficiales Gubernamentales (Exento):</span>
+                                    <strong>@nuevaFactura.Moneda @nuevaFactura.SubtotalGastosOficiales.ToString("N2")</strong>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1 small">
+                                    <span class="text-muted">Impuesto sobre Ventas ISV (15%):</span>
+                                    <strong class="text-secondary">@nuevaFactura.Moneda @nuevaFactura.MontoISV.ToString("N2")</strong>
+                                </div>
+                                <div class="d-flex justify-content-between border-top pt-2 mt-1">
+                                    <span class="fs-6 fw-bold text-dark">Total Documento:</span>
+                                    <strong class="fs-5 text-primary">@nuevaFactura.Moneda @nuevaFactura.TotalFactura.ToString("N2")</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light d-flex justify-content-between">
+                    <div>
+                        <span class="text-muted small">
+                            @(tipoEmisionSeleccionada == EstadoFactura.Emitida 
+                                ? "Se timbrará con CAI oficial e impactará la compuerta P360." 
+                                : "Las proformas y borradores no bloquean la solvencia P360.")
+                        </span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        @if (tipoEmisionSeleccionada == EstadoFactura.Borrador)
+                        {
+                            <RadzenButton Text="Guardar Borrador" Icon="save" ButtonStyle="ButtonStyle.Secondary" 
+                                          Click="@(() => GuardarFacturaConEstado(EstadoFactura.Borrador))" />
+                            <RadzenButton Text="Enviar a Revisión" Icon="send" ButtonStyle="ButtonStyle.Warning" 
+                                          Click="@(() => GuardarFacturaConEstado(EstadoFactura.PendienteAprobacion))" />
+                        }
+                        else if (tipoEmisionSeleccionada == EstadoFactura.PendienteAprobacion)
+                        {
+                            <RadzenButton Text="Enviar a Revisión de Socio" Icon="send" ButtonStyle="ButtonStyle.Warning" 
+                                          Click="@(() => GuardarFacturaConEstado(EstadoFactura.PendienteAprobacion))" />
+                            <RadzenButton Text="Guardar Borrador" Icon="save" ButtonStyle="ButtonStyle.Light" 
+                                          Click="@(() => GuardarFacturaConEstado(EstadoFactura.Borrador))" />
+                        }
+                        else
+                        {
+                            <RadzenButton Text="Emitir Factura Oficial SAR" Icon="verified" ButtonStyle="ButtonStyle.Success" 
+                                          Click="@(() => GuardarFacturaConEstado(EstadoFactura.Emitida))" Class="fw-bold" />
+                            <RadzenButton Text="Guardar Borrador" Icon="save" ButtonStyle="ButtonStyle.Light" 
+                                          Click="@(() => GuardarFacturaConEstado(EstadoFactura.Borrador))" />
+                        }
+                        <RadzenButton Text="Cancelar" ButtonStyle="ButtonStyle.Light" Click="@(() => mostrarModalNuevaFactura = false)" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ========================================================================= -->
+<!-- MODAL: DEVOLVER FACTURA A BORRADOR (RECHAZAR / SOLICITAR CORRECCIONES)    -->
+<!-- ========================================================================= -->
+@if (mostrarModalDevolver && facturaSeleccionadaDevolver != null)
+{
+    <div class="modal fade show d-block no-print" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header bg-warning text-dark border-bottom">
+                    <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
+                        <RadzenIcon Icon="undo" /> Devolver Proforma a Borrador
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="@(() => mostrarModalDevolver = false)"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <p class="small text-muted mb-2">
+                        Indique el motivo por el cual se devuelve la proforma <strong>@facturaSeleccionadaDevolver.NumeroFactura</strong> al redactor para corrección:
+                    </p>
+                    <RadzenFormField Text="Motivo de Devolución / Observaciones" Class="w-100 mb-3">
+                        <RadzenTextArea @bind-Value="motivoDevolucionIngresado" Rows="3" Class="w-100" 
+                                        Placeholder="Ej: Falta agregar el costo de publicación en La Gaceta; ajustar honorarios pactados..." />
+                    </RadzenFormField>
+                    <div class="alert alert-light border small text-muted">
+                        <RadzenIcon Icon="info" Class="me-1 text-warning" />
+                        Al devolver la proforma, quedará en estado <strong>Devuelta / Rechazada</strong> para que el paralegal aplique los cambios y la reenvíe a aprobación.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <RadzenButton Text="Devolver a Borrador" Icon="undo" ButtonStyle="ButtonStyle.Warning" Click="@ConfirmarDevolverABorrador" Class="fw-bold" />
+                    <RadzenButton Text="Cancelar" ButtonStyle="ButtonStyle.Light" Click="@(() => mostrarModalDevolver = false)" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ========================================================================= -->
+<!-- MODAL: VER DETALLE / COMPROBANTE FISCAL DE FACTURA (FORMATO OFICIAL SAR) -->
+<!-- ========================================================================= -->
+@if (mostrarModalDetalle && facturaDetalle != null)
+{
+    <div class="modal fade show d-block modal-comprobante-fiscal" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header @(facturaDetalle.EsProforma ? "bg-secondary text-white" : "bg-dark text-white") border-bottom d-flex align-items-center justify-content-between no-print">
+                    <h5 class="modal-title fw-bold d-flex align-items-center gap-2 m-0">
+                        <RadzenIcon Icon="@(facturaDetalle.EsProforma ? "edit_note" : "receipt_long")" /> 
+                        @(facturaDetalle.EsProforma ? "Documento Proforma / Presupuesto: " : "Factura Fiscal Oficial (Régimen SAR): ") @facturaDetalle.NumeroFactura
+                    </h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <RadzenButton Icon="open_in_new" Text="Abrir en Pestaña" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" 
+                                      Click="@(() => NavigationManager.NavigateTo($"/facturacion/imprimir/{facturaDetalle.Id}", true))" title="Abrir en página completa para imprimir o guardar" />
+                        <RadzenButton Icon="print" Text="Imprimir Factura (SAR)" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" 
+                                      Click="@ImprimirComprobante" Class="fw-bold shadow-sm" />
+                        <button type="button" class="btn-close btn-close-white" @onclick="@(() => mostrarModalDetalle = false)"></button>
+                    </div>
+                </div>
+                <div class="modal-body p-2 p-md-3 bg-white" id="seccion-comprobante-fiscal">
+                    <!-- AVISO DE ESTADO PROFORMA SI APLICA -->
+                    @if (facturaDetalle.EsProforma)
+                    {
+                        <div class="alert alert-warning border border-warning d-flex align-items-center justify-content-between p-2 mb-2 no-print">
+                            <div class="d-flex align-items-start gap-2">
+                                <RadzenIcon Icon="assignment_late" Class="fs-4 text-warning mt-1" />
+                                <div>
+                                    <strong class="text-dark d-block">PROFORMA / PRESUPUESTO PRELIMINAR (DOCUMENTO NO FISCAL)</strong>
+                                    <span class="small text-muted d-block">
+                                        Este documento es un presupuesto preliminar sin valor tributario fiscal ni bloqueo de compuerta P360.
+                                    </span>
+                                    @if (!string.IsNullOrEmpty(facturaDetalle.MotivoRechazo))
+                                    {
+                                        <div class="small text-danger fw-bold mt-1">
+                                            ⚠️ Observaciones: @facturaDetalle.MotivoRechazo
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            <span class="badge @ObtenerBadgeClaseEstado(facturaDetalle.Estado) fs-6 px-2 py-1">
+                                @ObtenerTextoEstado(facturaDetalle.Estado)
+                            </span>
+                        </div>
+                    }
+
+                    <!-- DOCUMENTO FISCAL TAMAÑO CARTA (US LETTER) -->
+                    <div class="documento-fiscal-carta">
+                        <!-- 1. ENCABEZADO TRIBUTARIO SAR DEL EMISOR -->
+                        <div class="encabezado-fiscal">
+                            <div class="row align-items-center g-2">
+                                <div class="col-7">
+                                    <h4 class="m-0 text-primary fw-bold" style="font-size: 13pt;">@nombreEmisor</h4>
+                                    <div class="text-secondary fw-semibold mb-1" style="font-size: 8pt;">
+                                        Bufete Jurídico Especializado en Propiedad Intelectual y Asuntos Corporativos
+                                    </div>
+                                    <div style="font-size: 8pt;">
+                                        <strong>RTN DEL EMISOR:</strong> <span class="font-monospace fw-bold text-primary">@rtnEmisor</span>
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success ms-1" style="font-size: 6.5pt;">✓ Registrado SAR</span>
+                                    </div>
+                                    <div class="text-muted" style="font-size: 7.5pt; margin-top: 2px;">
+                                        @direccionEmisor
+                                    </div>
+                                    <div class="text-muted" style="font-size: 7.5pt;">
+                                        Tel: @telefonoEmisor • Correo: @correoEmisor
+                                    </div>
+                                </div>
+
+                                <div class="col-5">
+                                    <div class="cuadro-cai">
+                                        <div class="badge-tipo-doc @(facturaDetalle.EsProforma ? "bg-warning text-dark" : "bg-primary text-white")">
+                                            @(facturaDetalle.EsProforma ? "DOCUMENTO PROFORMA" : "FACTURA")
+                                        </div>
+                                        <div class="font-monospace fw-bold text-dark my-1" style="font-size: 13pt;">@facturaDetalle.NumeroFactura</div>
+                                        
+                                        @if (!facturaDetalle.EsProforma)
+                                        {
+                                            <div class="border-top pt-1 mt-1 text-start" style="font-size: 7.5pt;">
+                                                <div class="text-truncate mb-1">
+                                                    <strong>CAI:</strong> 
+                                                    <span class="font-monospace text-primary fw-bold" style="font-size: 7pt;" title="@(facturaDetalle.NumeroCAI ?? caiAutorizado)">
+                                                        @(facturaDetalle.NumeroCAI ?? caiAutorizado)
+                                                    </span>
+                                                </div>
+                                                <div class="mb-1" style="font-size: 7pt;">
+                                                    <strong class="text-muted">Rango:</strong> @rangoAutorizado
+                                                </div>
+                                                <div style="font-size: 7.5pt;">
+                                                    <strong class="text-muted">Límite Emisión:</strong> <strong class="text-danger">@fechaLimiteEmision</strong>
+                                                </div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="border-top pt-1 mt-1 text-muted text-center font-monospace" style="font-size: 7pt;">
+                                                * DOCUMENTO PRELIMINAR SIN VALOR FISCAL *
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. DATOS OBLIGATORIOS DEL RECEPTOR / CLIENTE -->
+                        <div class="caja-datos-receptor">
+                            <div class="row g-2">
+                                <div class="col-6 border-end" style="padding-right: 12px;">
+                                    <div class="fw-bold text-secondary text-uppercase border-bottom pb-1 mb-1" style="font-size: 7pt;">
+                                        Datos Obligatorios del Receptor / Cliente
+                                    </div>
+                                    <div style="font-size: 8pt; margin-bottom: 2px;">
+                                        <span class="text-muted">Nombre o Razón Social:</span> <strong>@facturaDetalle.Cliente.NombreRazonSocial</strong>
+                                    </div>
+                                    <div style="font-size: 8pt; margin-bottom: 2px;">
+                                        <span class="text-muted">RTN del Receptor:</span> 
+                                        <strong class="font-monospace text-primary">
+                                            @(string.IsNullOrWhiteSpace(facturaDetalle.Cliente.NumeroIdentificacionRTN) ? "Consumidor Final" : facturaDetalle.Cliente.NumeroIdentificacionRTN)
+                                        </strong>
+                                    </div>
+                                    <div class="text-muted" style="font-size: 7.5pt;">
+                                        Dirección Fiscal: @(facturaDetalle.Cliente.DireccionExacta ?? "Tegucigalpa, Honduras")
+                                    </div>
+                                </div>
+
+                                <div class="col-6" style="padding-left: 12px;">
+                                    <div class="fw-bold text-secondary text-uppercase border-bottom pb-1 mb-1" style="font-size: 7pt;">
+                                        Datos de la Transacción y Expediente
+                                    </div>
+                                    <div class="row g-1" style="font-size: 8pt;">
+                                        <div class="col-6">
+                                            <span class="text-muted">Fecha Emisión:</span> <strong class="font-monospace">@facturaDetalle.FechaEmision.ToString("dd/MM/yyyy")</strong>
+                                        </div>
+                                        <div class="col-6">
+                                            <span class="text-muted">Vencimiento:</span> <strong class="text-danger font-monospace">@facturaDetalle.FechaVencimiento.ToString("dd/MM/yyyy")</strong>
+                                        </div>
+                                        <div class="col-12 border-top pt-1 mt-1">
+                                            <span class="text-muted">Expediente:</span>
+                                            @if (facturaDetalle.Expediente != null)
+                                            {
+                                                <strong class="text-primary">
+                                                    @facturaDetalle.Expediente.CodigoInterno - @facturaDetalle.Expediente.DenominacionMarca (Clase @facturaDetalle.Expediente.ClaseNiza)
+                                                </strong>
+                                                <div class="text-muted" style="font-size: 7pt;">
+                                                    Hito: @(facturaDetalle.HitoProcesal ?? "General") • Moneda: <strong>@facturaDetalle.Moneda</strong>
+                                                    @if (facturaDetalle.Moneda == "USD")
+                                                    {
+                                                        <span class="ms-1">TC BCH: L. @facturaDetalle.TasaCambio.ToString("N2")</span>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted font-italic">Servicios Profesionales de PI • Moneda: <strong>@facturaDetalle.Moneda</strong></span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. DETALLE DE BIENES Y SERVICIOS VENDIDOS (FORMATO REGLAMENTARIO SAR) -->
+                        <table class="tabla-sar">
+                            <thead>
+                                <tr>
+                                    <th style="width: 32px;">Cant</th>
+                                    <th>Descripción del Bien / Servicio Prestado</th>
+                                    <th style="width: 110px;">Clasificación Fiscal</th>
+                                    <th style="width: 75px; text-align: right;">Precio Unit.</th>
+                                    <th style="width: 50px; text-align: right;">Desc.</th>
+                                    <th style="width: 75px; text-align: right;">Base Impon.</th>
+                                    <th style="width: 65px; text-align: center;">Tasa ISV</th>
+                                    <th style="width: 70px; text-align: right;">ISV Desgl.</th>
+                                    <th style="width: 80px; text-align: right;">Total Línea</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var d in facturaDetalle.Detalles)
+                                {
+                                    <tr>
+                                        <td style="text-align: center; font-family: monospace;">@d.Cantidad</td>
+                                        <td>
+                                            <div style="font-weight: 600; color: #111;">@d.Concepto</div>
+                                            <div style="font-size: 7pt; color: #6c757d;">
+                                                @(d.EsGastoOficial ? "Gasto Oficial: Tasas gubernamentales DIGEPIH / ENAG / Timbre CAH" : "Honorarios Legales Profesionales de Representación")
+                                            </div>
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <span class="badge @(d.EsGastoOficial ? "bg-secondary text-white" : "bg-primary text-white")" style="font-size: 6.5pt;">
+                                                @(d.EsGastoOficial ? "Gasto Exento (0%)" : "Honorario (15%)")
+                                            </span>
+                                        </td>
+                                        <td style="text-align: right; font-family: monospace;">@facturaDetalle.Moneda @d.PrecioUnitario.ToString("N2")</td>
+                                        <td style="text-align: right; font-family: monospace; color: #6c757d;">0.00</td>
+                                        <td style="text-align: right; font-family: monospace;">@facturaDetalle.Moneda @d.Subtotal.ToString("N2")</td>
+                                        <td style="text-align: center; font-family: monospace; font-size: 7.5pt;">
+                                            @(d.EsGastoOficial ? "0.00%" : $"{tasaISVActual * 100:0.##}%")
+                                        </td>
+                                        <td style="text-align: right; font-family: monospace;">@facturaDetalle.Moneda @d.MontoISV.ToString("N2")</td>
+                                        <td style="text-align: right; font-family: monospace; font-weight: bold;">@facturaDetalle.Moneda @d.TotalLinea.ToString("N2")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+
+                        <!-- 4. CUADRO DE LIQUIDACIÓN TRIBUTARIA Y RESUMEN SAR -->
+                        <div class="resumen-inferior">
+                            <!-- COLUMNA IZQUIERDA: TOTAL EN LETRAS, LEYENDAS SAR Y SOLVENCIA P360 -->
+                            <div>
+                                <!-- TOTAL EN LETRAS (MANDATORIO SAR) -->
+                                <div class="caja-letras">
+                                    <div class="text-muted fw-bold" style="font-size: 7pt; margin-bottom: 2px;">TOTAL EN LETRAS (MANDATORIO SAR):</div>
+                                    <div class="font-monospace fw-bold text-dark text-uppercase" style="font-size: 8pt;">
+                                        @FacturacionService.ConvertirNumeroALetras(facturaDetalle.TotalFactura, facturaDetalle.Moneda)
+                                    </div>
+                                </div>
+
+                                <!-- LEYENDAS Y CONTROL DE REGÍMENES FISCALES SAR -->
+                                <div class="caja-leyenda-sar">
+                                    <div class="text-center fw-bold text-dark font-monospace border-bottom pb-1 mb-1" style="font-size: 7.5pt;">
+                                        "LA FACTURA ES BENEFICIO DE TODOS, ¡EXÍJALA!"
+                                    </div>
+                                    <div class="row g-1" style="font-size: 6.5pt;">
+                                        <div class="col-6">Orden Compra Exenta: <strong>N/A</strong></div>
+                                        <div class="col-6">Constancia Reg. Exonerado: <strong>N/A</strong></div>
+                                        <div class="col-6">Identificativo Reg. SAG: <strong>N/A</strong></div>
+                                        <div class="col-6">Régimen: <strong>Autoimpresor LegalTech v2.0</strong></div>
+                                    </div>
+                                </div>
+
+                                <!-- CERTIFICACIÓN DE SOLVENCIA P360 (MANUAL DE MARCAS PÁRRAFO 360) -->
+                                @if (facturaDetalle.Expediente != null)
+                                {
+                                    @if (facturaDetalle.EsProforma)
+                                    {
+                                        <div class="caja-p360 border bg-light text-secondary">
+                                            <div class="fw-bold mb-1" style="font-size: 7.5pt;">🛡️ PROFORMA EN TRÁMITE - SIN BLOQUEO P360</div>
+                                            <div style="font-size: 7pt;" class="text-muted">
+                                                Cotización preliminar sin timbrado SAR. No genera pasivo exigible que limite el retiro del título en bóveda.
+                                            </div>
+                                        </div>
+                                    }
+                                    else if (facturaDetalle.SaldoPendiente == 0)
+                                    {
+                                        <div class="caja-p360 p360-solvente">
+                                            <div class="fw-bold mb-1" style="font-size: 7.5pt;">🛡️ SOLVENCIA P360 ACREDITADA - TÍTULO HABILITADO</div>
+                                            <div style="font-size: 7pt;">
+                                                Expediente solvente en L. 0.00. El certificado original de registro puede ser retirado de bóveda y entregado al titular.
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="caja-p360 p360-bloqueado">
+                                            <div class="fw-bold mb-1" style="font-size: 7.5pt;">🛡️ COMPUERTA P360: SALDO PENDIENTE (BLOQUEADO)</div>
+                                            <div style="font-size: 7pt;">
+                                                El Manual de Marcas (Párrafo 360) prohíbe entregar el título original hasta saldar @facturaDetalle.Moneda @facturaDetalle.SaldoPendiente.ToString("N2").
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+
+                            <!-- COLUMNA DERECHA: LIQUIDACIÓN FISCAL SAR -->
+                            <div class="cuadro-liquidacion">
+                                <div class="fw-bold text-uppercase text-primary border-bottom pb-1 mb-1 d-flex justify-content-between" style="font-size: 7.5pt;">
+                                    <span>Liquidación Fiscal SAR</span>
+                                    <span class="text-muted" style="font-size: 6.5pt;">Valores en @facturaDetalle.Moneda</span>
+                                </div>
+                                
+                                <div class="fila-liquidacion">
+                                    <span class="text-muted">Importe Exento (Tasas Oficiales 0% ISV):</span>
+                                    <span class="font-monospace">@facturaDetalle.Moneda @facturaDetalle.SubtotalGastosOficiales.ToString("N2")</span>
+                                </div>
+                                <div class="fila-liquidacion">
+                                    <span class="text-muted">Importe Exonerado:</span>
+                                    <span class="font-monospace text-muted">@facturaDetalle.Moneda 0.00</span>
+                                </div>
+                                <div class="fila-liquidacion">
+                                    <span class="text-muted">Importe Gravado al 15% (Honorarios):</span>
+                                    <span class="font-monospace">@facturaDetalle.Moneda @facturaDetalle.SubtotalHonorarios.ToString("N2")</span>
+                                </div>
+                                <div class="fila-liquidacion">
+                                    <span class="text-muted">Importe Gravado al 18%:</span>
+                                    <span class="font-monospace text-muted">@facturaDetalle.Moneda 0.00</span>
+                                </div>
+
+                                <!-- BASE IMPONIBLE TOTAL (PRECIO SIN ISV) -->
+                                <div class="fila-liquidacion fila-destacada">
+                                    <span class="fw-bold">Base Imponible Total (Precio sin ISV):</span>
+                                    <span class="font-monospace fw-bold">
+                                        @facturaDetalle.Moneda @((facturaDetalle.SubtotalHonorarios + facturaDetalle.SubtotalGastosOficiales).ToString("N2"))
+                                    </span>
+                                </div>
+
+                                <!-- TASA DE ISV APLICADA (15%) -->
+                                <div class="fila-liquidacion">
+                                    <span class="text-primary fw-semibold">★ Tasa de ISV Aplicada:</span>
+                                    <span class="badge bg-primary" style="font-size: 6.5pt;">15.00%</span>
+                                </div>
+
+                                <!-- MONTO DE ISV DESGLOSADO -->
+                                <div class="fila-liquidacion fila-destacada">
+                                    <span class="text-primary fw-bold">★ Impuesto sobre Ventas (ISV 15% Desglosado):</span>
+                                    <strong class="font-monospace text-primary">@facturaDetalle.Moneda @facturaDetalle.MontoISV.ToString("N2")</strong>
+                                </div>
+
+                                <!-- TOTAL A PAGAR (BASE + ISV = TOTAL) -->
+                                <div class="fila-liquidacion fila-total">
+                                    <span>TOTAL A PAGAR (Base + ISV):</span>
+                                    <strong class="font-monospace" style="font-size: 10pt;">@facturaDetalle.Moneda @facturaDetalle.TotalFactura.ToString("N2")</strong>
+                                </div>
+
+                                <!-- ESTADO DE PAGOS SI NO ES PROFORMA -->
+                                @if (!facturaDetalle.EsProforma)
+                                {
+                                    <div class="fila-liquidacion" style="padding-top: 3px;">
+                                        <span class="text-success fw-semibold">Monto Pagado / Abonado:</span>
+                                        <span class="font-monospace text-success fw-bold">@facturaDetalle.Moneda @facturaDetalle.MontoPagado.ToString("N2")</span>
+                                    </div>
+                                    <div class="fila-liquidacion">
+                                        <span class="@(facturaDetalle.SaldoPendiente == 0 ? "text-success fw-bold" : "text-danger fw-bold")">
+                                            Saldo Pendiente de Cobro:
+                                        </span>
+                                        <strong class="font-monospace @(facturaDetalle.SaldoPendiente == 0 ? "text-success" : "text-danger")">
+                                            @facturaDetalle.Moneda @facturaDetalle.SaldoPendiente.ToString("N2")
+                                        </strong>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light no-print d-flex justify-content-between">
+                    <div class="d-flex gap-2">
+                        @if (facturaDetalle.Estado == EstadoFactura.Borrador)
+                        {
+                            <RadzenButton Icon="send" Text="Enviar a Revisión" ButtonStyle="ButtonStyle.Warning" 
+                                          Click="@(async () => { mostrarModalDetalle = false; await EnviarFacturaAAprobacion(facturaDetalle); })" />
+                            <RadzenButton Icon="check_circle" Text="Aprobar y Emitir SAR" ButtonStyle="ButtonStyle.Success" 
+                                          Click="@(async () => { mostrarModalDetalle = false; await AprobarFacturaDirecta(facturaDetalle); })" />
+                        }
+                        else if (facturaDetalle.Estado == EstadoFactura.PendienteAprobacion)
+                        {
+                            <RadzenButton Icon="check_circle" Text="Aprobar y Emitir SAR" ButtonStyle="ButtonStyle.Success" 
+                                          Click="@(async () => { mostrarModalDetalle = false; await AprobarFacturaDirecta(facturaDetalle); })" />
+                            <RadzenButton Icon="undo" Text="Devolver a Borrador" ButtonStyle="ButtonStyle.Warning" 
+                                          Click="@(() => { mostrarModalDetalle = false; AbrirModalDevolver(facturaDetalle); })" />
+                        }
+                        else if (facturaDetalle.Estado == EstadoFactura.Rechazada)
+                        {
+                            <RadzenButton Icon="refresh" Text="Reactivar Borrador" ButtonStyle="ButtonStyle.Warning" 
+                                          Click="@(async () => { mostrarModalDetalle = false; await ReactivarBorrador(facturaDetalle); })" />
+                        }
+                        else if ((facturaDetalle.Estado == EstadoFactura.Emitida || facturaDetalle.Estado == EstadoFactura.Parcial) && facturaDetalle.SaldoPendiente > 0)
+                        {
+                            <RadzenButton Icon="payments" Text="Registrar Cobro" ButtonStyle="ButtonStyle.Success" 
+                                          Click="@(() => { mostrarModalDetalle = false; AbrirModalCobro(facturaDetalle); })" />
+                        }
+                    </div>
+                    <div class="d-flex gap-2">
+                        <RadzenButton Icon="open_in_new" Text="Abrir en Pestaña" ButtonStyle="ButtonStyle.Light" 
+                                      Click="@(() => NavigationManager.NavigateTo($"/facturacion/imprimir/{facturaDetalle.Id}", true))" title="Abrir vista de impresión en página completa" />
+                        <RadzenButton Icon="print" Text="Imprimir Factura Fiscal SAR" ButtonStyle="ButtonStyle.Primary" Click="@ImprimirComprobante" Class="fw-bold px-3 shadow-sm" />
+                        <RadzenButton Text="Cerrar" ButtonStyle="ButtonStyle.Light" Click="@(() => mostrarModalDetalle = false)" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+/* ========================================================================= */
+/* ESTILOS DE PANTALLA PARA EL COMPROBANTE TAMAÑO CARTA                      */
+/* ========================================================================= */
+.documento-fiscal-carta {
+    width: 100%;
+    max-width: 215mm;
+    margin: 0 auto;
+    background: #fff;
+    padding: 0;
+    font-size: 8.5pt;
+    line-height: 1.25;
+    color: #111;
+}
+
+.encabezado-fiscal {
+    border: 1.5px solid #0d6efd;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background-color: #f8fafd;
+}
+
+.cuadro-cai {
+    border: 1.5px solid #0d6efd;
+    border-radius: 4px;
+    padding: 8px;
+    background: #fff;
+    text-align: right;
+}
+
+.badge-tipo-doc {
+    display: inline-block;
+    color: #fff;
+    font-size: 8.5pt;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.caja-datos-receptor {
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    background: #fff;
+}
+
+.tabla-sar {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 8px;
+}
+
+.tabla-sar th {
+    background-color: #e9ecef !important;
+    color: #212529;
+    border: 1px solid #adb5bd !important;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    padding: 4px 6px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.tabla-sar td {
+    border: 1px solid #ced4da !important;
+    padding: 4px 6px;
+    font-size: 8pt;
+    vertical-align: middle;
+}
+
+.resumen-inferior {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 10px;
+    align-items: start;
+}
+
+.caja-letras {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+}
+
+.caja-leyenda-sar {
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 6px 10px;
+    background: #fff;
+    font-size: 7pt;
+    color: #495057;
+    margin-bottom: 6px;
+}
+
+.caja-p360 {
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 7.5pt;
+}
+
+.p360-solvente {
+    border: 1px solid #198754;
+    background-color: #e8f5e9;
+    color: #0f5132;
+}
+
+.p360-bloqueado {
+    border: 1px solid #dc3545;
+    background-color: #fdf2f2;
+    color: #842029;
+}
+
+.cuadro-liquidacion {
+    border: 1.5px solid #0d6efd;
+    border-radius: 4px;
+    padding: 6px 10px;
+    background: #fff;
+}
+
+.fila-liquidacion {
+    display: flex;
+    justify-content: space-between;
+    padding: 2.5px 0;
+    border-bottom: 1px dashed #dee2e6;
+    font-size: 8pt;
+}
+
+.fila-liquidacion:last-child {
+    border-bottom: none;
+}
+
+.fila-destacada {
+    background-color: #e7f1ff;
+    padding: 3px 6px;
+    margin: 2px -6px;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+.fila-total {
+    background-color: #cfe2ff;
+    padding: 4px 6px;
+    margin: 3px -6px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 9pt;
+    color: #084298;
+}
+
+/* ========================================================================= */
+/* IMPRESIÓN REGLAMENTARIA SAR - TAMAÑO CARTA (US LETTER)                    */
+/* ========================================================================= */
+@@page {
+    size: letter portrait;
+    margin: 8mm 10mm 8mm 10mm;
+}
+
+@@media print {
+    *, *::before, *::after {
+        box-shadow: none !important;
+        text-shadow: none !important;
+    }
+
+    html, body {
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-family: Arial, Helvetica, sans-serif !important;
+        font-size: 8.5pt !important;
+        line-height: 1.25 !important;
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Ocultar interfaz de navegación, barra lateral, avisos y botones */
+    .sidebar,
+    .top-row,
+    #blazor-error-ui,
+    .no-print,
+    .pantalla-facturacion,
+    .modal-header,
+    .modal-footer,
+    .btn,
+    .btn-close,
+    .rz-notification-item {
+        display: none !important;
+    }
+
+    /* Reset estructural de contenedores para evitar cortes y scrolls */
+    .page,
+    main,
+    article,
+    .content,
+    .w-100 {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    /* Neutralizar contenedor Modal de Bootstrap */
+    .modal,
+    .modal-comprobante-fiscal {
+        position: static !important;
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        overflow: visible !important;
+        background: transparent !important;
+        background-color: transparent !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        z-index: auto !important;
+    }
+
+    .modal-dialog {
+        position: static !important;
+        display: block !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        transform: none !important;
+        overflow: visible !important;
+    }
+
+    .modal-content {
+        position: static !important;
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        max-height: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        overflow: visible !important;
+        background: transparent !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .modal-body {
+        position: static !important;
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    #seccion-comprobante-fiscal {
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        box-shadow: none !important;
+        border: none !important;
+        overflow: visible !important;
+    }
+
+    .documento-fiscal-carta {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Tabla y filas en impresión */
+    table, .tabla-sar {
+        border-collapse: collapse !important;
+        width: 100% !important;
+        page-break-inside: auto !important;
+    }
+
+    tr {
+        page-break-inside: avoid !important;
+        page-break-after: auto !important;
+    }
+
+    thead {
+        display: table-header-group !important;
+    }
+
+    th, td {
+        border: 1px solid #adb5bd !important;
+        padding: 4px 6px !important;
+        font-size: 8pt !important;
+    }
+
+    .resumen-inferior {
+        display: grid !important;
+        grid-template-columns: 1.15fr 0.85fr !important;
+        gap: 10px !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    .caja-p360, .cuadro-liquidacion, .caja-letras, .caja-leyenda-sar {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+}
+</style>
+
+@code {
+    [SupplyParameterFromQuery]
+    public Guid? ExpedienteId { get; set; }
+
+    [SupplyParameterFromQuery]
+    public bool? Nueva { get; set; }
+
+    private Expediente? expedienteFiltro;
+
+    private bool cargando = true;
+    private bool mostrarModalCobro = false;
+    private bool mostrarModalNuevaFactura = false;
+    private bool mostrarModalDetalle = false;
+    private bool mostrarModalDevolver = false;
+
+    private FacturaCobro? facturaSeleccionadaDevolver;
+    private string motivoDevolucionIngresado = "";
+
+    private EstadoFactura tipoEmisionSeleccionada = EstadoFactura.Borrador;
+    private record OpcionTipoEmision(EstadoFactura Valor, string Nombre);
+    private List<OpcionTipoEmision> opcionesTiposEmision = new()
+    {
+        new(EstadoFactura.Borrador, "📝 Borrador / Proforma"),
+        new(EstadoFactura.PendienteAprobacion, "⏳ Pendiente de Aprobación"),
+        new(EstadoFactura.Emitida, "📜 Factura Fiscal Oficial (SAR)")
+    };
+
+    private List<FacturaCobro> facturas = new();
+    private List<FacturaCobro> facturasFiltradas = new();
+    private List<Cliente> clientes = new();
+    private List<Expediente> expedientes = new();
+    private List<TarifaArancelaria> tarifasDisponibles = new();
+
+    private FacturaCobro? facturaCobroSeleccionada;
+    private FacturaCobro? facturaDetalle;
+    private FacturaCobro nuevaFactura = new();
+
+    private decimal totalFacturadoHNL = 0m;
+    private decimal totalCobradoHNL = 0m;
+    private decimal totalSaldoPendienteHNL = 0m;
+    private int totalFacturasConSaldo = 0;
+    private decimal totalProformasHNL = 0m;
+    private int totalProformasCount = 0;
+    private int expedientesSolventes = 0;
+
+    private string textoBusqueda = "";
+    private int filtroEstado = 0;
+    private string filtroMoneda = "Todas";
+    private string filtroHito = "Todos";
+
+    // Variables modal de cobro
+    private decimal montoPagoIngresado = 0m;
+    private string metodoPagoIngresado = "Transferencia Bancaria ACH";
+    private string? referenciaPagoIngresada;
+
+    // Variables modal nueva factura
+    private int? tarifaSeleccionadaId;
+    private decimal tasaISVActual = 0.15m;
+
+    // Parámetros dinámicos del Emisor y Régimen SAR
+    private string rtnEmisor = "08011990123456";
+    private string nombreEmisor = "LegalTech Honduras S. de R.L.";
+    private string direccionEmisor = "Edificio Corporativo Centro Morazán, Torre 1, Piso 7, Boulevard Morazán, Tegucigalpa, M.D.C., Francisco Morazán, Honduras";
+    private string telefonoEmisor = "+504 2239-0000 / +504 9988-7766";
+    private string correoEmisor = "facturacion@legaltech.hn";
+    private string caiAutorizado = "A84F2B-98CE21-1B4480-1498B2-FA8321-44";
+    private string rangoAutorizado = "001-001-01-00000001 al 001-001-01-00050000";
+    private string fechaLimiteEmision = "31/12/2027";
+
+    private record OpcionEstado(int Valor, string Nombre);
+    private List<OpcionEstado> opcionesEstados = new()
+    {
+        new(0, "Todos los Estados"),
+        new((int)EstadoFactura.Borrador, "Borrador (Proforma)"),
+        new((int)EstadoFactura.PendienteAprobacion, "Pendiente de Aprobación"),
+        new((int)EstadoFactura.Emitida, "Emitida SAR (Pendiente)"),
+        new((int)EstadoFactura.Parcial, "Pago Parcial"),
+        new((int)EstadoFactura.Pagada, "Pagada (Total)"),
+        new((int)EstadoFactura.Rechazada, "Devuelta / Rechazada"),
+        new((int)EstadoFactura.Anulada, "Anulada")
+    };
+
+    private List<string> opcionesMonedas = new() { "Todas", "HNL", "USD" };
+    private List<string> opcionesMonedasDisponibles = new() { "HNL", "USD" };
+
+    private List<string> opcionesHitos = new() { "Todos", "Apertura y Búsqueda", "Presentación Oficial", "Publicación en La Gaceta", "Título y Concesión Final", "Controversia y Litigio" };
+    private List<string> opcionesHitosDisponibles = new() { "Apertura y Búsqueda", "Presentación Oficial", "Publicación en La Gaceta", "Título y Concesión Final", "Controversia y Litigio" };
+
+    private List<string> metodosPagoDisponibles = new()
+    {
+        "Transferencia Bancaria ACH (BAC Credomatic)",
+        "Transferencia Bancaria ACH (Banco Ficohsa)",
+        "Transferencia Bancaria ACH (Banco Atlántida)",
+        "Cheque de Caja / Cheque Comercial",
+        "Transferencia Internacional Wire (USD)",
+        "Tarjeta de Crédito / Débito",
+        "Efectivo"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ExpedienteId.HasValue && (expedienteFiltro == null || expedienteFiltro.Id != ExpedienteId.Value))
+        {
+            expedienteFiltro = await ExpedienteService.GetExpedienteDetalleAsync(ExpedienteId.Value);
+            FiltrarFacturas();
+        }
+
+        if (Nueva == true && !mostrarModalNuevaFactura && facturas.Any())
+        {
+            await AbrirModalNuevaFactura();
+            if (expedienteFiltro != null)
+            {
+                nuevaFactura.ExpedienteId = expedienteFiltro.Id;
+                nuevaFactura.ClienteId = expedienteFiltro.ClienteId;
+            }
+        }
+    }
+
+    private void QuitarFiltroExpediente()
+    {
+        ExpedienteId = null;
+        expedienteFiltro = null;
+        NavigationManager.NavigateTo("/facturacion");
+        FiltrarFacturas();
+    }
+
+    private async Task CargarDatos()
+    {
+        cargando = true;
+        clientes = await ClienteService.GetClientesAsync();
+        expedientes = await ExpedienteService.GetExpedientesAsync();
+        tarifasDisponibles = await FacturacionService.GetTarifasAsync(soloActivas: true);
+        facturas = await FacturacionService.GetFacturasAsync();
+
+        if (ExpedienteId.HasValue && expedienteFiltro == null)
+        {
+            expedienteFiltro = await ExpedienteService.GetExpedienteDetalleAsync(ExpedienteId.Value);
+        }
+
+        tasaISVActual = await FacturacionService.GetParametroDecimalAsync("ISV_PORCENTAJE", 15.00m) / 100m;
+        rtnEmisor = await FacturacionService.GetParametroStringAsync("RTN_EMISOR", "08011990123456");
+        nombreEmisor = await FacturacionService.GetParametroStringAsync("NOMBRE_EMISOR", "LegalTech Honduras S. de R.L.");
+        direccionEmisor = await FacturacionService.GetParametroStringAsync("DIRECCION_EMISOR", "Edificio Corporativo Centro Morazán, Torre 1, Piso 7, Boulevard Morazán, Tegucigalpa, M.D.C., Francisco Morazán, Honduras");
+        telefonoEmisor = await FacturacionService.GetParametroStringAsync("TELEFONO_EMISOR", "+504 2239-0000 / +504 9988-7766");
+        correoEmisor = await FacturacionService.GetParametroStringAsync("CORREO_EMISOR", "facturacion@legaltech.hn");
+        caiAutorizado = await FacturacionService.GetParametroStringAsync("CAI_SAR_AUTORIZADO", "A84F2B-98CE21-1B4480-1498B2-FA8321-44");
+        rangoAutorizado = await FacturacionService.GetParametroStringAsync("RANGO_AUTORIZADO_SAR", "001-001-01-00000001 al 001-001-01-00050000");
+        fechaLimiteEmision = await FacturacionService.GetParametroStringAsync("FECHA_LIMITE_SAR", "31/12/2027");
+
+        CalcularKPIs();
+        FiltrarFacturas();
+        cargando = false;
+
+        if (Nueva == true && !mostrarModalNuevaFactura)
+        {
+            await AbrirModalNuevaFactura();
+            if (expedienteFiltro != null)
+            {
+                nuevaFactura.ExpedienteId = expedienteFiltro.Id;
+                nuevaFactura.ClienteId = expedienteFiltro.ClienteId;
+            }
+        }
+    }
+
+    private void CalcularKPIs()
+    {
+        totalFacturadoHNL = 0m;
+        totalCobradoHNL = 0m;
+        totalSaldoPendienteHNL = 0m;
+        totalFacturasConSaldo = 0;
+        totalProformasHNL = 0m;
+        totalProformasCount = 0;
+
+        foreach (var f in facturas.Where(f => f.Estado != EstadoFactura.Anulada))
+        {
+            decimal factor = f.Moneda == "USD" ? f.TasaCambio : 1m;
+            if (f.EsProforma)
+            {
+                totalProformasHNL += f.TotalFactura * factor;
+                totalProformasCount++;
+            }
+            else
+            {
+                totalFacturadoHNL += f.TotalFactura * factor;
+                totalCobradoHNL += f.MontoPagado * factor;
+                totalSaldoPendienteHNL += f.SaldoPendiente * factor;
+
+                if (f.SaldoPendiente > 0)
+                {
+                    totalFacturasConSaldo++;
+                }
+            }
+        }
+
+        // Conteo de expedientes solventes: Solo deudas oficiales activas bloquean P360
+        var expedientesIds = facturas.Where(f => f.ExpedienteId.HasValue).Select(f => f.ExpedienteId!.Value).Distinct();
+        expedientesSolventes = 0;
+        foreach (var expId in expedientesIds)
+        {
+            var facs = facturas.Where(f => f.ExpedienteId == expId && !f.EsProforma && f.Estado != EstadoFactura.Anulada);
+            if (facs.Any() && facs.All(f => f.SaldoPendiente == 0))
+            {
+                expedientesSolventes++;
+            }
+            else if (!facs.Any())
+            {
+                expedientesSolventes++;
+            }
+        }
+    }
+
+    private void FiltrarFacturas()
+    {
+        var query = facturas.AsEnumerable();
+
+        if (ExpedienteId.HasValue)
+        {
+            query = query.Where(f => f.ExpedienteId == ExpedienteId.Value);
+        }
+
+        if (filtroEstado > 0)
+        {
+            query = query.Where(f => (int)f.Estado == filtroEstado);
+        }
+
+        if (filtroMoneda != "Todas")
+        {
+            query = query.Where(f => f.Moneda == filtroMoneda);
+        }
+
+        if (filtroHito != "Todos")
+        {
+            query = query.Where(f => f.HitoProcesal == filtroHito);
+        }
+
+        if (!string.IsNullOrWhiteSpace(textoBusqueda))
+        {
+            string t = textoBusqueda.Trim().ToLowerInvariant();
+            query = query.Where(f =>
+                f.NumeroFactura.ToLowerInvariant().Contains(t) ||
+                (f.NumeroCAI != null && f.NumeroCAI.ToLowerInvariant().Contains(t)) ||
+                f.Cliente.NombreRazonSocial.ToLowerInvariant().Contains(t) ||
+                f.Cliente.NumeroIdentificacionRTN.ToLowerInvariant().Contains(t) ||
+                (f.Expediente != null && f.Expediente.CodigoInterno.ToLowerInvariant().Contains(t)) ||
+                (f.Expediente != null && f.Expediente.DenominacionMarca.ToLowerInvariant().Contains(t))
+            );
+        }
+
+        facturasFiltradas = query.ToList();
+    }
+
+    private string ObtenerTextoEstado(EstadoFactura estado)
+    {
+        return estado switch
+        {
+            EstadoFactura.Borrador => "Borrador (Proforma)",
+            EstadoFactura.PendienteAprobacion => "Pend. Aprobación",
+            EstadoFactura.Emitida => "Emitida SAR",
+            EstadoFactura.Parcial => "Pago Parcial",
+            EstadoFactura.Pagada => "Pagada",
+            EstadoFactura.Rechazada => "Devuelta",
+            EstadoFactura.Anulada => "Anulada",
+            _ => estado.ToString()
+        };
+    }
+
+    private string ObtenerBadgeClaseEstado(EstadoFactura estado)
+    {
+        return estado switch
+        {
+            EstadoFactura.Borrador => "bg-secondary text-white",
+            EstadoFactura.PendienteAprobacion => "bg-warning text-dark",
+            EstadoFactura.Emitida => "bg-danger text-white",
+            EstadoFactura.Parcial => "bg-primary text-white",
+            EstadoFactura.Pagada => "bg-success text-white",
+            EstadoFactura.Rechazada => "bg-danger bg-opacity-75 text-white",
+            EstadoFactura.Anulada => "bg-dark text-white",
+            _ => "bg-secondary text-white"
+        };
+    }
+
+    private void AbrirModalCobro(FacturaCobro f)
+    {
+        facturaCobroSeleccionada = f;
+        montoPagoIngresado = f.SaldoPendiente;
+        metodoPagoIngresado = f.Moneda == "USD" ? "Transferencia Internacional Wire (USD)" : "Transferencia Bancaria ACH (BAC Credomatic)";
+        referenciaPagoIngresada = "";
+        mostrarModalCobro = true;
+    }
+
+    private async Task EjecutarRegistroCobro()
+    {
+        if (facturaCobroSeleccionada == null || montoPagoIngresado <= 0) return;
+
+        await FacturacionService.RegistrarPagoAsync(
+            facturaCobroSeleccionada.Id,
+            montoPagoIngresado,
+            metodoPagoIngresado,
+            referenciaPagoIngresada,
+            "Abg. Administrador"
+        );
+
+        NotificationService.Notify(NotificationSeverity.Success, "Cobro Registrado", 
+            $"Se abonó {facturaCobroSeleccionada.Moneda} {montoPagoIngresado:N2} a la factura {facturaCobroSeleccionada.NumeroFactura}.");
+
+        mostrarModalCobro = false;
+        await CargarDatos();
+    }
+
+    private async Task EnviarFacturaAAprobacion(FacturaCobro f)
+    {
+        await FacturacionService.EnviarAAprobacionAsync(f.Id, "Abg. Especialista");
+        NotificationService.Notify(NotificationSeverity.Info, "Enviada a Revisión", 
+            $"La proforma {f.NumeroFactura} fue enviada a revisión de los socios.");
+        await CargarDatos();
+    }
+
+    private async Task AprobarFacturaDirecta(FacturaCobro f)
+    {
+        bool? confirmado = await DialogService.Confirm(
+            $"¿Desea aprobar la proforma {f.NumeroFactura} por {f.Moneda} {f.TotalFactura:N2} y autorizar su timbrado formal SAR?",
+            "Aprobar y Emitir Factura Fiscal SAR",
+            new ConfirmOptions { OkButtonText = "Aprobar y Emitir", CancelButtonText = "Cancelar" }
+        );
+
+        if (confirmado == true)
+        {
+            var facturaEmitida = await FacturacionService.AprobarFacturaAsync(f.Id, "Socio Director");
+            NotificationService.Notify(NotificationSeverity.Success, "Factura Emitida SAR", 
+                $"La proforma fue aprobada y timbrada con el correlativo {facturaEmitida.NumeroFactura}.");
+            await CargarDatos();
+        }
+    }
+
+    private void AbrirModalDevolver(FacturaCobro f)
+    {
+        facturaSeleccionadaDevolver = f;
+        motivoDevolucionIngresado = "";
+        mostrarModalDevolver = true;
+    }
+
+    private async Task ConfirmarDevolverABorrador()
+    {
+        if (facturaSeleccionadaDevolver == null) return;
+        if (string.IsNullOrWhiteSpace(motivoDevolucionIngresado))
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Atención", "Debe indicar el motivo o las observaciones para devolver la proforma.");
+            return;
+        }
+
+        await FacturacionService.DevolverABorradorAsync(facturaSeleccionadaDevolver.Id, motivoDevolucionIngresado, "Socio Director");
+        NotificationService.Notify(NotificationSeverity.Warning, "Proforma Devuelta", 
+            $"La proforma {facturaSeleccionadaDevolver.NumeroFactura} regresó a borrador para correcciones.");
+        mostrarModalDevolver = false;
+        await CargarDatos();
+    }
+
+    private async Task ReactivarBorrador(FacturaCobro f)
+    {
+        await FacturacionService.DevolverABorradorAsync(f.Id, "Reactivada para edición por el usuario", "Abg. Administrador");
+        NotificationService.Notify(NotificationSeverity.Info, "Proforma Reactivada", 
+            $"La proforma {f.NumeroFactura} está nuevamente disponible para edición.");
+        await CargarDatos();
+    }
+
+    private async Task EliminarBorrador(FacturaCobro f)
+    {
+        bool? confirmado = await DialogService.Confirm(
+            $"¿Está seguro de eliminar permanentemente el borrador {f.NumeroFactura}?",
+            "Descartar Borrador",
+            new ConfirmOptions { OkButtonText = "Eliminar", CancelButtonText = "Cancelar" }
+        );
+
+        if (confirmado == true)
+        {
+            await FacturacionService.AnularFacturaAsync(f.Id, "Borrador descartado por el usuario", "Administrador");
+            NotificationService.Notify(NotificationSeverity.Info, "Borrador Descartado", $"El borrador {f.NumeroFactura} fue descartado.");
+            await CargarDatos();
+        }
+    }
+
+    private async Task ConfirmarAnular(FacturaCobro f)
+    {
+        bool? confirmado = await DialogService.Confirm(
+            $"¿Está seguro de anular la factura {f.NumeroFactura} por {f.Moneda} {f.TotalFactura:N2}?",
+            "Anular Factura",
+            new ConfirmOptions { OkButtonText = "Anular", CancelButtonText = "Cancelar" }
+        );
+
+        if (confirmado == true)
+        {
+            await FacturacionService.AnularFacturaAsync(f.Id, "Anulada a solicitud del usuario", "Administrador");
+            NotificationService.Notify(NotificationSeverity.Info, "Factura Anulada", $"La factura {f.NumeroFactura} fue anulada.");
+            await CargarDatos();
+        }
+    }
+
+    private void VerDetalleFactura(FacturaCobro f)
+    {
+        facturaDetalle = f;
+        mostrarModalDetalle = true;
+    }
+
+    private async Task AlCambiarTipoEmision()
+    {
+        if (tipoEmisionSeleccionada == EstadoFactura.Emitida)
+        {
+            nuevaFactura.NumeroFactura = $"FAC-2026-{(facturas.Count(f => !f.EsProforma) + 1):D4}";
+            nuevaFactura.NumeroCAI = await FacturacionService.GetParametroStringAsync("CAI_SAR_AUTORIZADO", "A84F2B-98CE21-1B4480-1498B2-FA8321-44");
+        }
+        else
+        {
+            nuevaFactura.NumeroFactura = $"PROF-2026-{(facturas.Count(f => f.EsProforma) + 1):D4}";
+            nuevaFactura.NumeroCAI = null;
+        }
+        nuevaFactura.Estado = tipoEmisionSeleccionada;
+    }
+
+    private async Task AbrirModalNuevaFactura()
+    {
+        tipoEmisionSeleccionada = EstadoFactura.Borrador;
+        string prefijo = $"PROF-2026-{(facturas.Count(f => f.EsProforma) + 1):D4}";
+        decimal tasaCambio = await FacturacionService.GetParametroDecimalAsync("TASA_CAMBIO_USD_HNL", 25.50m);
+
+        nuevaFactura = new FacturaCobro
+        {
+            Id = Guid.Empty,
+            NumeroFactura = prefijo,
+            NumeroCAI = null,
+            ClienteId = expedienteFiltro?.ClienteId ?? clientes.FirstOrDefault()?.Id ?? Guid.Empty,
+            ExpedienteId = expedienteFiltro?.Id,
+            FechaEmision = DateTime.Today,
+            FechaVencimiento = DateTime.Today.AddDays(15),
+            Moneda = "HNL",
+            TasaCambio = tasaCambio,
+            HitoProcesal = "Presentación Oficial",
+            Estado = EstadoFactura.Borrador,
+            SolicitadoPor = "Abg. Especialista",
+            CreadoEn = DateTime.UtcNow,
+            Detalles = new List<DetalleFacturaCobro>()
+        };
+
+        // Cargar por defecto la tarifa de presentación si existe
+        var tarifaPresentacion = tarifasDisponibles.FirstOrDefault(t => t.EtapaProcesal == "Presentación");
+        if (tarifaPresentacion != null)
+        {
+            tarifaSeleccionadaId = tarifaPresentacion.Id;
+            AgregarTarifaAFactura();
+        }
+
+        mostrarModalNuevaFactura = true;
+    }
+
+    private void AlSeleccionarExpedienteEnFactura()
+    {
+        if (nuevaFactura.ExpedienteId.HasValue)
+        {
+            var exp = expedientes.FirstOrDefault(e => e.Id == nuevaFactura.ExpedienteId.Value);
+            if (exp != null)
+            {
+                nuevaFactura.ClienteId = exp.ClienteId;
+            }
+        }
+    }
+
+    private void AgregarTarifaAFactura()
+    {
+        if (!tarifaSeleccionadaId.HasValue) return;
+        var t = tarifasDisponibles.FirstOrDefault(x => x.Id == tarifaSeleccionadaId.Value);
+        if (t == null) return;
+
+        bool esUSD = nuevaFactura.Moneda == "USD";
+        decimal honorarios = esUSD ? t.HonorariosUSD : t.HonorariosHNL;
+        decimal gastos = esUSD ? t.GastosOficialesUSD : t.GastosOficialesHNL;
+
+        // Línea de honorarios profesionales (gravado)
+        if (honorarios > 0)
+        {
+            nuevaFactura.Detalles.Add(new DetalleFacturaCobro
+            {
+                Id = Guid.NewGuid(),
+                TarifaArancelariaId = t.Id,
+                Concepto = $"Honorarios: {t.Concepto}",
+                EsGastoOficial = false,
+                Cantidad = 1,
+                PrecioUnitario = honorarios,
+                Subtotal = honorarios,
+                MontoISV = Math.Round(honorarios * tasaISVActual, 2),
+                TotalLinea = honorarios + Math.Round(honorarios * tasaISVActual, 2)
+            });
+        }
+
+        // Línea de gastos oficiales exentos
+        if (gastos > 0)
+        {
+            nuevaFactura.Detalles.Add(new DetalleFacturaCobro
+            {
+                Id = Guid.NewGuid(),
+                TarifaArancelariaId = t.Id,
+                Concepto = $"Gastos Oficiales: Tasas gubernamentales / ENAG ({t.Concepto})",
+                EsGastoOficial = true,
+                Cantidad = 1,
+                PrecioUnitario = gastos,
+                Subtotal = gastos,
+                MontoISV = 0m,
+                TotalLinea = gastos
+            });
+        }
+
+        RecalcularTotalesNuevaFactura();
+    }
+
+    private void EliminarLineaFactura(DetalleFacturaCobro linea)
+    {
+        nuevaFactura.Detalles.Remove(linea);
+        RecalcularTotalesNuevaFactura();
+    }
+
+    private void RecalcularTotalesNuevaFactura()
+    {
+        decimal hon = 0m;
+        decimal gas = 0m;
+        decimal isv = 0m;
+
+        foreach (var d in nuevaFactura.Detalles)
+        {
+            d.Subtotal = d.Cantidad * d.PrecioUnitario;
+            if (d.EsGastoOficial)
+            {
+                d.MontoISV = 0m;
+                gas += d.Subtotal;
+            }
+            else
+            {
+                d.MontoISV = Math.Round(d.Subtotal * tasaISVActual, 2);
+                hon += d.Subtotal;
+                isv += d.MontoISV;
+            }
+            d.TotalLinea = d.Subtotal + d.MontoISV;
+        }
+
+        nuevaFactura.SubtotalHonorarios = hon;
+        nuevaFactura.SubtotalGastosOficiales = gas;
+        nuevaFactura.MontoISV = isv;
+        nuevaFactura.TotalFactura = hon + gas + isv;
+        nuevaFactura.SaldoPendiente = nuevaFactura.TotalFactura - nuevaFactura.MontoPagado;
+    }
+
+    private async Task GuardarFacturaConEstado(EstadoFactura estadoDestino)
+    {
+        if (nuevaFactura.ClienteId == Guid.Empty)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Atención", "Debe seleccionar un cliente.");
+            return;
+        }
+
+        if (!nuevaFactura.Detalles.Any())
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Atención", "Debe agregar al menos una línea o servicio a la factura.");
+            return;
+        }
+
+        nuevaFactura.Estado = estadoDestino;
+        if (estadoDestino == EstadoFactura.Emitida)
+        {
+            if (string.IsNullOrEmpty(nuevaFactura.NumeroFactura) || nuevaFactura.NumeroFactura.StartsWith("PROF-"))
+            {
+                nuevaFactura.NumeroFactura = $"FAC-2026-{(facturas.Count(f => !f.EsProforma) + 1):D4}";
+            }
+            if (string.IsNullOrEmpty(nuevaFactura.NumeroCAI))
+            {
+                nuevaFactura.NumeroCAI = await FacturacionService.GetParametroStringAsync("CAI_SAR_AUTORIZADO", "A84F2B-98CE21-1B4480-1498B2-FA8321-44");
+            }
+            nuevaFactura.AprobadoPor = "Socio Director";
+            nuevaFactura.FechaAprobacion = DateTime.UtcNow;
+        }
+        else
+        {
+            nuevaFactura.SolicitadoPor = "Abg. Especialista";
+            if (string.IsNullOrEmpty(nuevaFactura.NumeroFactura) || nuevaFactura.NumeroFactura.StartsWith("FAC-"))
+            {
+                nuevaFactura.NumeroFactura = $"PROF-2026-{(facturas.Count(f => f.EsProforma) + 1):D4}";
+            }
+            nuevaFactura.NumeroCAI = null;
+        }
+
+        await FacturacionService.GuardarFacturaAsync(nuevaFactura, "Abg. Administrador");
+        
+        string msg = estadoDestino switch
+        {
+            EstadoFactura.Borrador => $"Proforma {nuevaFactura.NumeroFactura} guardada en borrador.",
+            EstadoFactura.PendienteAprobacion => $"Proforma {nuevaFactura.NumeroFactura} enviada a revisión de socios.",
+            EstadoFactura.Emitida => $"Factura oficial SAR {nuevaFactura.NumeroFactura} emitida exitosamente.",
+            _ => $"Documento {nuevaFactura.NumeroFactura} guardado."
+        };
+
+        NotificationService.Notify(NotificationSeverity.Success, "Operación Exitosa", msg);
+        mostrarModalNuevaFactura = false;
+        await CargarDatos();
+    }
+
+    private void AgregarLineaManual()
+    {
+        nuevaFactura.Detalles.Add(new DetalleFacturaCobro
+        {
+            Id = Guid.NewGuid(),
+            Concepto = "Honorarios Legales / Asesoría de PI",
+            EsGastoOficial = false,
+            Cantidad = 1,
+            PrecioUnitario = 0m,
+            Subtotal = 0m,
+            MontoISV = 0m,
+            TotalLinea = 0m
+        });
+        RecalcularTotalesNuevaFactura();
+    }
+
+    private void AlternarTipoLinea(DetalleFacturaCobro d)
+    {
+        d.EsGastoOficial = !d.EsGastoOficial;
+        RecalcularTotalesNuevaFactura();
+    }
+
+    private async Task ImprimirFacturaDirecta(FacturaCobro f)
+    {
+        facturaDetalle = f;
+        mostrarModalDetalle = true;
+        StateHasChanged();
+        await Task.Delay(250);
+        await JSRuntime.InvokeVoidAsync("window.print");
+    }
+
+    private async Task ImprimirComprobante()
+    {
+        await JSRuntime.InvokeVoidAsync("window.print");
+    }
+}

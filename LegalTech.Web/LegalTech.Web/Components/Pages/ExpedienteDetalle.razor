@@ -1,12 +1,14 @@
 @page "/expedientes/{Id:guid}"
 @rendermode InteractiveServer
 @using LegalTech.Web.Domain.Entities
+@using LegalTech.Web.Domain.Enums
 @using LegalTech.Web.Services
 @inject ExpedienteService ExpedienteService
 @inject ClienteService ClienteService
 @inject CatalogoService CatalogoService
 @inject PlazosService PlazosService
 @inject LitigioService LitigioService
+@inject FacturacionService FacturacionService
 @inject NotificationService NotificationService
 @inject DialogService DialogService
 @inject NavigationManager NavigationManager
@@ -740,44 +742,125 @@
                     </div>
                 </RadzenTabsItem>
 
-                <!-- PESTAÑA 4: TÍTULO OFICIAL Y SOLVENCIA P360 (GATEKEEPER) -->
+                <!-- PESTAÑA 5: TÍTULO OFICIAL Y SOLVENCIA P360 (GATEKEEPER) -->
                 <RadzenTabsItem Text="Título y Solvencia P360" Icon="workspace_premium">
                     <div class="p-3">
-                        <!-- BANNER CRÍTICO DE LA COMPUERTA DE SOLVENCIA P360 -->
-                        @if (certificadoActual.SolvenciaValidada)
-                        {
-                            <RadzenAlert AlertStyle="AlertStyle.Success" Variant="Variant.Flat" Class="mb-3" AllowClose="false">
-                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <!-- BANNER Y GESTOR DE SOLVENCIA P360 (MANUAL DE MARCAS PÁRRAFO 360) -->
+                        <RadzenCard Class="@(certificadoActual.SolvenciaValidada ? "p-3 mb-3 border-0 shadow-sm bg-white border-start border-success border-4" : "p-3 mb-3 border-0 shadow-sm bg-white border-start border-danger border-4")">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 border-bottom pb-2 mb-3">
+                                <div>
                                     <div class="d-flex align-items-center gap-2">
-                                        <RadzenIcon Icon="verified" Class="fs-3 text-success" />
+                                        <RadzenIcon Icon="@(certificadoActual.SolvenciaValidada ? "verified" : "block")" 
+                                                    Class="@(certificadoActual.SolvenciaValidada ? "text-success fs-3" : "text-danger fs-3")" />
                                         <div>
-                                            <strong>SOLVENCIA P360 CERTIFICADA - DESPACHO AUTORIZADO</strong><br />
-                                            Validada el @(certificadoActual.FechaValidacionSolvencia?.ToString("dd/MM/yyyy HH:mm") ?? "N/A") por <u>@(certificadoActual.ValidadoPorUsuario ?? "Administración")</u>. 
-                                            El cliente está solvente y se autoriza la entrega física y digital del título.
+                                            <h6 class="fw-bold m-0 @(certificadoActual.SolvenciaValidada ? "text-success" : "text-danger")">
+                                                @(certificadoActual.SolvenciaValidada ? "SOLVENCIA P360 VALIDADA - DESPACHO Y ENTREGA AUTORIZADOS" : "COMPUERTA P360 ACTIVA: TÍTULO BLOQUEADO POR MORA")
+                                            </h6>
+                                            <small class="text-muted">
+                                                @(certificadoActual.SolvenciaValidada 
+                                                    ? $"Validado el {certificadoActual.FechaValidacionSolvencia:dd/MM/yyyy HH:mm} por {certificadoActual.ValidadoPorUsuario ?? "Departamento Financiero"}." 
+                                                    : "Párrafo 360: Prohibido entregar el título o enviar copias oficiales hasta que el saldo pendiente sea L. 0.00.")
+                                            </small>
                                         </div>
                                     </div>
-                                    <RadzenButton Icon="lock_open" Text="Revocar Solvencia" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" 
-                                                  Click="@(() => AlternarSolvencia(false))" />
                                 </div>
-                            </RadzenAlert>
-                        }
-                        else
-                        {
-                            <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Class="mb-3" AllowClose="false">
-                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <RadzenIcon Icon="block" Class="fs-3 text-danger" />
-                                        <div>
-                                            <strong>COMPUERTA P360 ACTIVA: TÍTULO BLOQUEADO POR REGLA DE SOLVENCIA</strong><br />
-                                            Por regla de gestión del despacho (Párrafo 360 del Manual), está <b>estrictamente prohibido</b> entregar el certificado original 
-                                            o remitir copias oficiales hasta que el departamento contable certifique el pago total de honorarios y gastos.
+                                <div class="d-flex align-items-center gap-2">
+                                    <RadzenButton Icon="add_circle" Text="+ Emitir Factura" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                                  Click="@(() => NavigationManager.NavigateTo($"/facturacion?expedienteId={expediente?.Id}&nueva=true"))" />
+                                    <RadzenButton Icon="sync" Text="Verificar Facturas" ButtonStyle="ButtonStyle.Info" Size="ButtonSize.Small" 
+                                                  Click="@SincronizarSolvenciaConFacturas" title="Validar en tiempo real si el saldo es L. 0.00" />
+                                    <RadzenButton Icon="receipt_long" Text="Módulo Cobranzas" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" 
+                                                  Click="@(() => NavigationManager.NavigateTo($"/facturacion?expedienteId={expediente?.Id}"))" />
+                                    @if (certificadoActual.SolvenciaValidada)
+                                    {
+                                        <RadzenButton Icon="lock_open" Text="Revocar" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" 
+                                                      Click="@(() => AlternarSolvencia(false))" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenButton Icon="verified_user" Text="Aprobar Solvencia (Supervisión)" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
+                                                      Click="@(() => AlternarSolvencia(true))" title="Autorización manual excepcional por apoderado" />
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- RESUMEN FINANCIERO DEL CASO -->
+                            <RadzenRow Gap="1rem" Class="mb-3">
+                                <RadzenColumn Size="12" SizeMD="4">
+                                    <div class="p-2 border rounded bg-light">
+                                        <small class="text-muted d-block">Total Facturado (HNL)</small>
+                                        <strong class="fs-6 text-dark">L @(facturasExpediente.Where(f => f.Moneda == "HNL").Sum(f => f.TotalFactura).ToString("N2"))</strong>
+                                        <div class="small text-muted">$ @(facturasExpediente.Where(f => f.Moneda == "USD").Sum(f => f.TotalFactura).ToString("N2")) USD</div>
+                                    </div>
+                                </RadzenColumn>
+                                <RadzenColumn Size="12" SizeMD="4">
+                                    <div class="p-2 border rounded bg-light">
+                                        <small class="text-muted d-block">Total Cobrado / Pagado</small>
+                                        <strong class="fs-6 text-success">L @(facturasExpediente.Where(f => f.Moneda == "HNL").Sum(f => f.MontoPagado).ToString("N2"))</strong>
+                                        <div class="small text-muted">@facturasExpediente.Count(f => f.Estado == EstadoFactura.Pagada) factura(s) saldada(s)</div>
+                                    </div>
+                                </RadzenColumn>
+                                <RadzenColumn Size="12" SizeMD="4">
+                                    <div class="p-2 border rounded @(saldoPendienteExpediente > 0 ? "bg-danger bg-opacity-10 border-danger" : "bg-success bg-opacity-10 border-success")">
+                                        <small class="@(saldoPendienteExpediente > 0 ? "text-danger" : "text-success") fw-bold d-block">Saldo Pendiente</small>
+                                        <strong class="fs-5 @(saldoPendienteExpediente > 0 ? "text-danger" : "text-success")">L @saldoPendienteExpediente.ToString("N2")</strong>
+                                        <div class="small @(saldoPendienteExpediente > 0 ? "text-danger" : "text-success")">
+                                            @(saldoPendienteExpediente == 0 ? "Solvente (L. 0.00)" : "Compuerta P360 Bloqueada")
                                         </div>
                                     </div>
-                                    <RadzenButton Icon="verified_user" Text="Aprobar Solvencia P360" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" 
-                                                  Click="@(() => AlternarSolvencia(true))" />
+                                </RadzenColumn>
+                            </RadzenRow>
+
+                            <!-- LISTA DE FACTURAS VINCULADAS -->
+                            @if (facturasExpediente.Any())
+                            {
+                                <div class="table-responsive border rounded">
+                                    <table class="table table-hover table-sm mb-0 align-middle">
+                                        <thead class="table-light small">
+                                            <tr>
+                                                <th>No. Factura</th>
+                                                <th>Fecha</th>
+                                                <th>Concepto / Hito</th>
+                                                <th class="text-end">Total</th>
+                                                <th class="text-end">Saldo Pendiente</th>
+                                                <th class="text-center">Estado</th>
+                                                <th class="text-end">Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="small">
+                                            @foreach (var fac in facturasExpediente)
+                                            {
+                                                <tr>
+                                                    <td><strong>@fac.NumeroFactura</strong></td>
+                                                    <td>@fac.FechaEmision.ToString("dd/MM/yyyy")</td>
+                                                    <td>@(fac.HitoProcesal ?? "Servicios de PI")</td>
+                                                    <td class="text-end">@fac.Moneda @fac.TotalFactura.ToString("N2")</td>
+                                                    <td class="text-end @(fac.SaldoPendiente > 0 ? "text-danger fw-bold" : "text-success")">
+                                                        @fac.Moneda @fac.SaldoPendiente.ToString("N2")
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <span class="badge @(fac.Estado == EstadoFactura.Pagada ? "bg-success" : (fac.Estado == EstadoFactura.Parcial ? "bg-warning text-dark" : "bg-secondary"))">
+                                                            @fac.Estado
+                                                        </span>
+                                                    </td>
+                                                    <td class="text-end">
+                                                        <RadzenButton Icon="receipt" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall" 
+                                                                      Click="@(() => NavigationManager.NavigateTo($"/facturacion?expedienteId={expediente?.Id}"))" title="Ir a Facturación" />
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
                                 </div>
-                            </RadzenAlert>
-                        }
+                            }
+                            else
+                            {
+                                <div class="text-muted small p-2 bg-light rounded text-center">
+                                    No se han generado facturas contables para este caso marcario. 
+                                    <a href="/facturacion?expedienteId=@expediente?.Id&nueva=true" class="fw-bold ms-1">Emitir Factura en Facturación</a>
+                                </div>
+                            }
+                        </RadzenCard>
 
                         <RadzenTemplateForm TItem="CertificadoRegistro" Data="@certificadoActual" Submit="@GuardarCertificado">
                             <RadzenRow Gap="1rem">
@@ -941,6 +1024,11 @@
     private PublicacionENAG publicacionActual = new();
     private CertificadoRegistro certificadoActual = new();
 
+    // Control Financiero y Solvencia P360
+    private List<FacturaCobro> facturasExpediente = new();
+    private decimal saldoPendienteExpediente = 0m;
+    private bool esSolventeP360 = false;
+
     // Motor de Plazos Legales y Semáforo (Art. 42 LPA)
     private List<PlazoLegal> plazosExpediente = new();
     private (PlazoLegal? Plazo, SemaforoPlazo? Semaforo) plazoMasUrgente;
@@ -1017,6 +1105,12 @@
 
             // Cargar controversias y litigios del expediente
             litigiosExpediente = await LitigioService.GetLitigiosPorExpedienteAsync(Id);
+
+            // Cargar solvencia financiera P360 y facturación vinculada
+            var solvencia = await FacturacionService.ConsultarSolvenciaExpedienteAsync(Id);
+            esSolventeP360 = solvencia.EsSolvente;
+            saldoPendienteExpediente = solvencia.SaldoPendienteTotal;
+            facturasExpediente = await FacturacionService.GetFacturasPorExpedienteAsync(Id);
 
             // Inicializar nueva actuación
             ResetNuevaActuacion();
@@ -1151,6 +1245,21 @@
         {
             certificadoActual.FechaVencimientoDecenal = certificadoActual.FechaConcesion.AddYears(10);
         }
+    }
+
+    private async Task SincronizarSolvenciaConFacturas()
+    {
+        if (expediente == null) return;
+        var esSolvente = await FacturacionService.SincronizarSolvenciaP360Async(expediente.Id);
+        if (esSolvente)
+        {
+            NotificationService.Notify(NotificationSeverity.Success, "Solvencia P360 Validada", "Todas las facturas del expediente están pagadas al 100%. Título autorizado para entrega.");
+        }
+        else
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Compuerta P360 Activa", $"Existe saldo pendiente de L. {saldoPendienteExpediente:N2}. El título continuará bloqueado hasta su liquidación.");
+        }
+        await CargarExpediente();
     }
 
     private async Task AlternarSolvencia(bool esSolvente)

@@ -32,6 +32,7 @@ builder.Services.AddScoped<CatalogoService>();
 builder.Services.AddScoped<PlazosService>();
 builder.Services.AddScoped<ClienteService>();
 builder.Services.AddScoped<LitigioService>();
+builder.Services.AddScoped<FacturacionService>();
 
 var app = builder.Build();
 
@@ -65,6 +66,90 @@ using (var scope = app.Services.CreateScope())
             ""Cumplido"" INTEGER NOT NULL,
             ""FechaCumplimiento"" TEXT NULL,
             CONSTRAINT ""FK_PlazosLegales_Expedientes_ExpedienteId"" FOREIGN KEY (""ExpedienteId"") REFERENCES ""Expedientes"" (""Id"") ON DELETE CASCADE
+        );
+    ");
+
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS ""ParametrosFiscales"" (
+            ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_ParametrosFiscales"" PRIMARY KEY AUTOINCREMENT,
+            ""Clave"" TEXT NOT NULL,
+            ""Nombre"" TEXT NOT NULL,
+            ""Valor"" TEXT NOT NULL,
+            ""TipoDato"" TEXT NOT NULL,
+            ""Categoria"" TEXT NOT NULL,
+            ""Descripcion"" TEXT NULL,
+            ""Activo"" INTEGER NOT NULL
+        );
+    ");
+
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS ""TarifasArancelarias"" (
+            ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_TarifasArancelarias"" PRIMARY KEY AUTOINCREMENT,
+            ""Concepto"" TEXT NOT NULL,
+            ""EtapaProcesal"" TEXT NOT NULL,
+            ""HonorariosHNL"" TEXT NOT NULL,
+            ""HonorariosUSD"" TEXT NOT NULL,
+            ""GastosOficialesHNL"" TEXT NOT NULL,
+            ""GastosOficialesUSD"" TEXT NOT NULL,
+            ""AplicaISV"" INTEGER NOT NULL,
+            ""Descripcion"" TEXT NULL,
+            ""Activo"" INTEGER NOT NULL
+        );
+    ");
+
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS ""Facturas"" (
+            ""Id"" TEXT NOT NULL CONSTRAINT ""PK_Facturas"" PRIMARY KEY,
+            ""NumeroFactura"" TEXT NOT NULL,
+            ""NumeroCAI"" TEXT NULL,
+            ""ClienteId"" TEXT NOT NULL,
+            ""ExpedienteId"" TEXT NULL,
+            ""FechaEmision"" TEXT NOT NULL,
+            ""FechaVencimiento"" TEXT NOT NULL,
+            ""Moneda"" TEXT NOT NULL,
+            ""TasaCambio"" TEXT NOT NULL,
+            ""SubtotalHonorarios"" TEXT NOT NULL,
+            ""SubtotalGastosOficiales"" TEXT NOT NULL,
+            ""MontoISV"" TEXT NOT NULL,
+            ""TotalFactura"" TEXT NOT NULL,
+            ""MontoPagado"" TEXT NOT NULL,
+            ""SaldoPendiente"" TEXT NOT NULL,
+            ""Estado"" INTEGER NOT NULL,
+            ""SolicitadoPor"" TEXT NULL,
+            ""AprobadoPor"" TEXT NULL,
+            ""FechaAprobacion"" TEXT NULL,
+            ""MotivoRechazo"" TEXT NULL,
+            ""FechaPago"" TEXT NULL,
+            ""MetodoPago"" TEXT NULL,
+            ""ReferenciaBancaria"" TEXT NULL,
+            ""Observaciones"" TEXT NULL,
+            ""HitoProcesal"" TEXT NULL,
+            ""CreadoEn"" TEXT NOT NULL,
+            CONSTRAINT ""FK_Facturas_Clientes_ClienteId"" FOREIGN KEY (""ClienteId"") REFERENCES ""Clientes"" (""Id"") ON DELETE RESTRICT,
+            CONSTRAINT ""FK_Facturas_Expedientes_ExpedienteId"" FOREIGN KEY (""ExpedienteId"") REFERENCES ""Expedientes"" (""Id"") ON DELETE SET NULL
+        );
+    ");
+
+    // Migraciones en vivo para bases de datos SQLite preexistentes
+    try { db.Database.ExecuteSqlRaw(@"ALTER TABLE ""Facturas"" ADD COLUMN ""SolicitadoPor"" TEXT NULL;"); } catch { }
+    try { db.Database.ExecuteSqlRaw(@"ALTER TABLE ""Facturas"" ADD COLUMN ""AprobadoPor"" TEXT NULL;"); } catch { }
+    try { db.Database.ExecuteSqlRaw(@"ALTER TABLE ""Facturas"" ADD COLUMN ""FechaAprobacion"" TEXT NULL;"); } catch { }
+    try { db.Database.ExecuteSqlRaw(@"ALTER TABLE ""Facturas"" ADD COLUMN ""MotivoRechazo"" TEXT NULL;"); } catch { }
+
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS ""DetallesFactura"" (
+            ""Id"" TEXT NOT NULL CONSTRAINT ""PK_DetallesFactura"" PRIMARY KEY,
+            ""FacturaId"" TEXT NOT NULL,
+            ""TarifaArancelariaId"" INTEGER NULL,
+            ""Concepto"" TEXT NOT NULL,
+            ""EsGastoOficial"" INTEGER NOT NULL,
+            ""Cantidad"" INTEGER NOT NULL,
+            ""PrecioUnitario"" TEXT NOT NULL,
+            ""Subtotal"" TEXT NOT NULL,
+            ""MontoISV"" TEXT NOT NULL,
+            ""TotalLinea"" TEXT NOT NULL,
+            CONSTRAINT ""FK_DetallesFactura_Facturas_FacturaId"" FOREIGN KEY (""FacturaId"") REFERENCES ""Facturas"" (""Id"") ON DELETE CASCADE,
+            CONSTRAINT ""FK_DetallesFactura_TarifasArancelarias_TarifaArancelariaId"" FOREIGN KEY (""TarifaArancelariaId"") REFERENCES ""TarifasArancelarias"" (""Id"") ON DELETE SET NULL
         );
     ");
 

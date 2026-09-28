@@ -6,6 +6,7 @@
 @inject ExpedienteService ExpedienteService
 @inject ClienteService ClienteService
 @inject PlazosService PlazosService
+@inject FacturacionService FacturacionService
 @inject NavigationManager NavigationManager
 
 <PageTitle>Torre de Control de Propiedad Intelectual - LegalTech Honduras</PageTitle>
@@ -45,6 +46,8 @@
                               Click="@(() => NavigationManager.NavigateTo("/litigios"))" Class="shadow-sm" />
                 <RadzenButton Icon="people" Text="Clientes" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Medium" 
                               Click="@(() => NavigationManager.NavigateTo("/clientes"))" Class="shadow-sm" />
+                <RadzenButton Icon="receipt_long" Text="Facturación P360" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Medium" 
+                              Click="@(() => NavigationManager.NavigateTo("/facturacion"))" Class="shadow-sm" />
                 <RadzenButton Icon="tune" Text="Configuración" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Medium" 
                               Click="@(() => NavigationManager.NavigateTo("/configuraciones"))" Class="shadow-sm" />
             </div>
@@ -505,7 +508,7 @@
         <!-- 4. CUADRÍCULA DE MÓDULOS DEL SISTEMA (ACCESO RÁPIDO) -->
         <RadzenRow Gap="1rem">
             <!-- Módulo Expedientes -->
-            <RadzenColumn Size="12" SizeSM="6" SizeLG="3">
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
                 <div class="card h-100 p-3 bg-white shadow-sm border-0 card-hover cursor-pointer" 
                      @onclick="@(() => NavigationManager.NavigateTo("/expedientes"))">
                     <div class="d-flex align-items-center gap-3 mb-2">
@@ -518,13 +521,13 @@
                         </div>
                     </div>
                     <p class="text-muted small mb-0">
-                        Administre solicitudes ante DIGEPIH, clasificación Niza, poderes, resoluciones y línea de tiempo procesal.
+                        Administre solicitudes ante DIGEPIH, clasificación Niza (1 a 45), poderes, resoluciones y línea de tiempo procesal.
                     </p>
                 </div>
             </RadzenColumn>
 
             <!-- Módulo Clientes -->
-            <RadzenColumn Size="12" SizeSM="6" SizeLG="3">
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
                 <div class="card h-100 p-3 bg-white shadow-sm border-0 card-hover cursor-pointer" 
                      @onclick="@(() => NavigationManager.NavigateTo("/clientes"))">
                     <div class="d-flex align-items-center gap-3 mb-2">
@@ -537,32 +540,13 @@
                         </div>
                     </div>
                     <p class="text-muted small mb-0">
-                        Padrón oficial de personas naturales y jurídicas con RTN, contactos y cartera de signos solicitados.
+                        Padrón oficial de personas naturales y jurídicas con RTN, poderes de representación y cartera de signos solicitados.
                     </p>
                 </div>
             </RadzenColumn>
 
-            <!-- Módulo Configuraciones -->
-            <RadzenColumn Size="12" SizeSM="6" SizeLG="3">
-                <div class="card h-100 p-3 bg-white shadow-sm border-0 card-hover cursor-pointer" 
-                     @onclick="@(() => NavigationManager.NavigateTo("/configuraciones"))">
-                    <div class="d-flex align-items-center gap-3 mb-2">
-                        <div class="p-3 rounded-circle bg-secondary bg-opacity-10 text-secondary">
-                            <RadzenIcon Icon="tune" Style="font-size: 1.8rem;" />
-                        </div>
-                        <div>
-                            <strong class="fs-6 text-dark d-block">Configuraciones</strong>
-                            <span class="text-muted small">Tablas paramétricas</span>
-                        </div>
-                    </div>
-                    <p class="text-muted small mb-0">
-                        Mantenimiento en BD de tipos de signo distintivo, estados procesales, tipos de actuación y feriados nacionales.
-                    </p>
-                </div>
-            </RadzenColumn>
-
-            <!-- Módulo Litigios (Activo) -->
-            <RadzenColumn Size="12" SizeSM="6" SizeLG="3">
+            <!-- Módulo Litigios -->
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
                 <div class="card h-100 p-3 bg-white shadow-sm border-0 card-hover cursor-pointer position-relative overflow-hidden" 
                      @onclick="@(() => NavigationManager.NavigateTo("/litigios"))">
                     <div class="position-absolute top-0 end-0 m-2">
@@ -579,6 +563,66 @@
                     </div>
                     <p class="text-muted small mb-0">
                         Oposiciones de terceros (30 d), contestaciones (10 d), auditoría de no uso, recursos de reposición y apelación.
+                    </p>
+                </div>
+            </RadzenColumn>
+
+            <!-- Módulo Facturación y Solvencia P360 (NUEVO) -->
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 card-hover cursor-pointer position-relative overflow-hidden" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/facturacion"))">
+                    <div class="position-absolute top-0 end-0 m-2">
+                        <span class="badge bg-success text-white fw-bold" style="font-size: 0.65rem;">P360 GATEKEEPER</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <div class="p-3 rounded-circle bg-success bg-opacity-10 text-success">
+                            <RadzenIcon Icon="receipt_long" Style="font-size: 1.8rem;" />
+                        </div>
+                        <div>
+                            <strong class="fs-6 text-dark d-block">Facturación y Cobranzas</strong>
+                            <span class="text-muted small">Aranceles y Solvencia P360</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        Honorarios con ISV 15%, gastos oficiales exentos (DIGEPIH/ENAG/CAH) y bloqueo de títulos por mora (Párrafo 360).
+                    </p>
+                </div>
+            </RadzenColumn>
+
+            <!-- Módulo Publicaciones ENAG -->
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 card-hover cursor-pointer" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/expedientes?filtro=gaceta"))">
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <div class="p-3 rounded-circle text-white" style="background-color: #6f42c1;">
+                            <RadzenIcon Icon="newspaper" Style="font-size: 1.8rem;" />
+                        </div>
+                        <div>
+                            <strong class="fs-6 text-dark d-block">Ciclo La Gaceta (ENAG)</strong>
+                            <span class="text-muted small">3 avisos y ejemplares físicos</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        Monitoreo de publicaciones consecutivas (~15 d), compra de ejemplares físicos y entrega ante DIGEPIH contra abandono.
+                    </p>
+                </div>
+            </RadzenColumn>
+
+            <!-- Módulo Configuraciones -->
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                <div class="card h-100 p-3 bg-white shadow-sm border-0 card-hover cursor-pointer" 
+                     @onclick="@(() => NavigationManager.NavigateTo("/configuraciones"))">
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <div class="p-3 rounded-circle bg-secondary bg-opacity-10 text-secondary">
+                            <RadzenIcon Icon="tune" Style="font-size: 1.8rem;" />
+                        </div>
+                        <div>
+                            <strong class="fs-6 text-dark d-block">Configuraciones Maestras</strong>
+                            <span class="text-muted small">Tablas paramétricas en BD</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        Parámetros fiscales SAR/BCH, aranceles por etapa, tipos de signo, estados procesales y feriados nacionales.
                     </p>
                 </div>
             </RadzenColumn>
